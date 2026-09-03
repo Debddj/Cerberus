@@ -52,3 +52,6 @@ ignore_missing_imports = true
 asyncio_mode = "auto"
 testpaths = ["tests"]
 pythonpath = ["src", "."]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/cerberus"]
