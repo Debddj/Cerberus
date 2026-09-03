@@ -1,0 +1,97 @@
+services:
+  # ── Cerberus Proxy ──
+  cerberus-proxy:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: cerberus-proxy
+    ports:
+      - "8000:8000"   # JSON-RPC Proxy & API
+      - "9090:9090"   # Prometheus /metrics
+    environment:
+      - CERBERUS_MODE=enforce
+      - CERBERUS_OPA_URL=http://opa:8181/v1/data
+      - CERBERUS_LOG_PATH=/app/data/events.jsonl
+    volumes:
+      - ./data:/app/data
+      - ./policies:/app/policies
+    depends_on:
+      - opa
+    networks:
+      - cerberus-net
+
+  # ── Policy Engine (Open Policy Agent) ──
+  opa:
+    image: openpolicyagent/opa:latest
+    container_name: cerberus-opa
+    command: ["run", "--server", "--addr", "0.0.0.0:8181", "/policies/base"]
+    volumes:
+      - ./policies/base:/policies/base:ro
+    ports:
+      - "8181:8181"
+    networks:
+      - cerberus-net
+
+  # ── Observability Dashboard ──
+  dashboard:
+    build:
+      context: .
+      dockerfile: Dockerfile.dashboard
+    container_name: cerberus-dashboard
+    ports:
+      - "8501:8501"
+    volumes:
+      - ./data:/app/data:ro
+      - ./policies:/app/policies
+    environment:
+      - CERBERUS_DATA_PATH=/app/data/events.jsonl
+      - CERBERUS_OPA_URL=http://opa:8181/v1/data
+    depends_on:
+      - cerberus-proxy
+    networks:
+      - cerberus-net
+
+  # ── Fake MCP Sandbox Servers ──
+  file-server:
+    build:
+      context: ./sandbox/servers/file_server
+    container_name: mcp-file-server
+    read_only: true
+    cap_drop:
+      - ALL
+    networks:
+      - cerberus-net
+
+  db-server:
+    build:
+      context: ./sandbox/servers/db_server
+    container_name: mcp-db-server
+    read_only: true
+    cap_drop:
+      - ALL
+    networks:
+      - cerberus-net
+
+  webhook-server:
+    build:
+      context: ./sandbox/servers/webhook_server
+    container_name: mcp-webhook-server
+    read_only: true
+    cap_drop:
+      - ALL
+    networks:
+      - cerberus-net
+
+  inbox-server:
+    build:
+      context: ./sandbox/servers/inbox_server
+    container_name: mcp-inbox-server
+    read_only: true
+    cap_drop:
+      - ALL
+    networks:
+      - cerberus-net
+
+networks:
+  cerberus-net:
+    driver: bridge

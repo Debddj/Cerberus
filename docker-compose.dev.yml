@@ -1,0 +1,7 @@
+services:
+  cerberus-proxy:
+    volumes:
+      - ./src:/app/src
+    environment:
+      - CERBERUS_DEBUG=true
+      - CERBERUS_MODE=audit
