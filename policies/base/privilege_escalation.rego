@@ -1,12 +1,12 @@
-package cerberus.privilege_escalation
+﻿package cerberus.privilege_escalation
 
-default allow = true
+default allow := true
 
 # Deny if tool called is outside declared agent scope
-deny {
+deny if {
     input.static_scan.out_of_scope == true
 }
 
-reason = "Privilege escalation: Tool invoked is outside agent's authorized capability scope" {
+reason := "Privilege escalation: Tool invoked is outside agent's authorized capability scope" if {
     deny
 }

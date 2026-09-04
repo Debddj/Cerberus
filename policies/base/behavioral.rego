@@ -1,17 +1,17 @@
-package cerberus.behavioral
+﻿package cerberus.behavioral
 
-default decision = "allow"
+default decision := "allow"
 
-decision = "quarantine" {
+decision := "quarantine" if {
     input.risk_score >= 0.9
 }
 
-decision = "block" {
+decision := "block" if {
     input.risk_score >= 0.7
     input.risk_score < 0.9
 }
 
-decision = "flag" {
+decision := "flag" if {
     input.risk_score >= 0.4
     input.risk_score < 0.7
 }

@@ -5,19 +5,19 @@ REGO_TEMPLATE = """
 # Generated at {{ generated_at }}
 package cerberus.agent.{{ agent_safe_id }}
 
-default allow = true
+default allow := true
 
-allowed_tools = {
+allowed_tools := {
 {% for tool in allowed_tools %}
     "{{ tool }}",
 {% endfor %}
 }
 
-deny {
+deny if {
     not input.tool_name in allowed_tools
 }
 
-reason = "Auto-synthesized policy: Tool is not in agent's observed baseline allowed set" {
+reason := "Auto-synthesized policy: Tool is not in agent's observed baseline allowed set" if {
     deny
 }
 """
