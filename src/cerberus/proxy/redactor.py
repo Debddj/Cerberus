@@ -33,21 +33,21 @@ class SecretRedactor:
 
     @classmethod
     def redact_dict(cls, data: dict[str, Any]) -> tuple[dict[str, Any], list[str]]:
-        redacted = {}
-        fields_redacted = []
+        redacted: dict[str, Any] = {}
+        fields_redacted: list[str] = []
         for k, v in data.items():
             key_is_sensitive = any(kw in k.lower() for kw in SENSITIVE_KEY_KEYWORDS)
             if key_is_sensitive and isinstance(v, str):
                 redacted[k] = "[REDACTED_SECRET]"
                 fields_redacted.append(k)
             elif isinstance(v, str):
-                v_red, mod = cls.redact_text(v)
-                redacted[k] = v_red
+                v_str, mod = cls.redact_text(v)
+                redacted[k] = v_str
                 if mod:
                     fields_redacted.append(k)
             elif isinstance(v, dict):
-                v_red, child_mods = cls.redact_dict(v)
-                redacted[k] = v_red
+                v_dict, child_mods = cls.redact_dict(v)
+                redacted[k] = v_dict
                 if child_mods:
                     fields_redacted.extend([f"{k}.{c}" for c in child_mods])
             else:
