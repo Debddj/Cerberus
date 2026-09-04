@@ -1,8 +1,9 @@
-import asyncio
 import httpx
+
 
 class SupportAgentSimulator:
     """Simulates a customer support ticket agent reading tickets and responding."""
+
     def __init__(self, proxy_url: str = "http://localhost:8000/mcp"):
         self.proxy_url = proxy_url
 
@@ -14,4 +15,7 @@ class SupportAgentSimulator:
         ]
         async with httpx.AsyncClient() as client:
             for tool, params in sequence:
-                await client.post(self.proxy_url, json={"method": "tools/call", "params": {"name": tool, "arguments": params}})
+                await client.post(
+                    self.proxy_url,
+                    json={"method": "tools/call", "params": {"name": tool, "arguments": params}},
+                )

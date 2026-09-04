@@ -1,5 +1,6 @@
 from cerberus.behavioral.scaling import RunningScaler
 
+
 def test_running_scaler():
     scaler = RunningScaler()
     values = [10.0, 20.0, 30.0, 40.0, 50.0]

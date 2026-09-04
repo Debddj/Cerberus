@@ -1,13 +1,10 @@
 import json
 import time
-try:
-    from evaluation.metrics import calculate_tpr, calculate_fpr
-except ImportError:
-    from metrics import calculate_tpr, calculate_fpr
+
 
 def run_evaluation():
     print("Executing Cerberus benchmark & evaluation replay harness...")
-    
+
     results = {
         "timestamp": time.time(),
         "standard_scenarios": {
@@ -26,13 +23,14 @@ def run_evaluation():
             "false_positive_rate": 0.024,
             "latency_p50_ms": 7.4,
             "latency_p95_ms": 19.8,
-            "latency_p99_ms": 38.2
-        }
+            "latency_p99_ms": 38.2,
+        },
     }
-    
+
     with open("evaluation_results.json", "w", encoding="utf-8") as f:
         json.dump(results, f, indent=2)
     print("Evaluation completed. Results stored in evaluation_results.json")
+
 
 if __name__ == "__main__":
     run_evaluation()

@@ -1,12 +1,14 @@
 import json
+
 import aiofiles
-import aiosqlite
-from cerberus.proxy.models import ToolCallEvent
+
 from cerberus.config import settings
+from cerberus.proxy.models import ToolCallEvent
+
 
 class AuditLogger:
     """Asynchronous audit logger supporting both JSONL and SQLite with redaction."""
-    
+
     def __init__(self, log_path: str | None = None, db_path: str | None = None):
         self.log_path = log_path or settings.log_path
         self.db_path = db_path or settings.pins_db_path

@@ -1,8 +1,9 @@
 from collections import deque
 
+
 class SessionWindowManager:
     """Maintains recent sliding sequence context per agent session."""
-    
+
     def __init__(self, window_size: int = 5):
         self.window_size = window_size
         self.sessions: dict[str, deque[str]] = {}

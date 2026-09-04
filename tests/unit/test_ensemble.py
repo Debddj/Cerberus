@@ -1,9 +1,11 @@
 from cerberus.behavioral.ensemble import EnsembleScorer
 
+
 def test_ensemble_combination():
     ensemble = EnsembleScorer()
     score, _ = ensemble.combine(0.2, 0.3, 0.4, [], [], [])
     assert 0.25 <= score <= 0.35
+
 
 def test_circuit_breaker():
     ensemble = EnsembleScorer()

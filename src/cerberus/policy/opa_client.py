@@ -1,13 +1,16 @@
-import httpx
 import logging
-from cerberus.proxy.models import ToolCallEvent, EventDecision
+
+import httpx
+
 from cerberus.config import settings
+from cerberus.proxy.models import EventDecision, ToolCallEvent
 
 logger = logging.getLogger("cerberus.opa")
 
+
 class OPAClient:
     """Queries Open Policy Agent sidecar with built-in Fail-Closed outage handling."""
-    
+
     def __init__(self, opa_url: str | None = None, timeout: float = 2.0):
         self.opa_url = opa_url or settings.opa_url
         self.timeout = timeout
@@ -25,22 +28,21 @@ class OPAClient:
                 "static_scan": {
                     "schema_drift": False,
                     "lethal_trifecta": False,
-                    "out_of_scope": False
+                    "out_of_scope": False,
                 },
-                "config": {
-                    "schema_pin_mode": settings.mode,
-                    "trifecta_override": False
-                }
+                "config": {"schema_pin_mode": settings.mode, "trifecta_override": False},
             }
         }
-        
+
         try:
-            resp = await self.client.post(f"{self.opa_url}/cerberus/behavioral/decision", json=payload)
+            resp = await self.client.post(
+                f"{self.opa_url}/cerberus/behavioral/decision", json=payload
+            )
             resp.raise_for_status()
             data = resp.json()
             decision_str = data.get("result", "allow")
             return EventDecision(decision_str), f"OPA Policy Decision: {decision_str}"
-            
+
         except Exception as e:
             logger.error(f"OPA unreachable or timeout: {e}")
             if settings.fail_closed:

@@ -4,7 +4,7 @@ st.set_page_config(
     page_title="Cerberus MCP Behavioral Firewall",
     page_icon="🛡️",
     layout="wide",
-    initial_sidebar_state="expanded"
+    initial_sidebar_state="expanded",
 )
 
 st.title("🛡️ Cerberus Security Operations Center")

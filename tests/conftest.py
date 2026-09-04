@@ -1,6 +1,7 @@
 import pytest
-import asyncio
-from cerberus.proxy.models import ToolCallEvent, EventDecision
+
+from cerberus.proxy.models import ToolCallEvent
+
 
 @pytest.fixture
 def sample_event():
@@ -10,8 +11,9 @@ def sample_event():
         tool_name="read_file",
         tool_server="file-server",
         parameters={"path": "src/main.py"},
-        sequence_position=0
+        sequence_position=0,
     )
+
 
 @pytest.fixture
 def hostile_exfil_event():
@@ -23,5 +25,5 @@ def hostile_exfil_event():
         parameters={"payload": "STOLEN_DATA"},
         parameter_size_bytes=15000,
         destination_domain="evil.exfil.org",
-        sequence_position=4
+        sequence_position=4,
     )

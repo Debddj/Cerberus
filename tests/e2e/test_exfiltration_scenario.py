@@ -1,6 +1,7 @@
-from sandbox.traffic.attacks.injection_exfil import get_toxic_flow_sequence
-from cerberus.behavioral.scorers.rule_based import RuleBasedScorer
 from cerberus.behavioral.features import FeatureExtractor
+from cerberus.behavioral.scorers.rule_based import RuleBasedScorer
+from sandbox.traffic.attacks.injection_exfil import get_toxic_flow_sequence
+
 
 def test_e2e_toxic_flow():
     events = get_toxic_flow_sequence()

@@ -1,5 +1,6 @@
-from sandbox.traffic.attacks.privilege_escalation import get_privilege_escalation_event
 from cerberus.scanner.scope_analyzer import ScopeAnalyzer
+from sandbox.traffic.attacks.privilege_escalation import get_privilege_escalation_event
+
 
 def test_e2e_privilege_escalation():
     event = get_privilege_escalation_event()

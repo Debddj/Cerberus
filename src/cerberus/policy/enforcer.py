@@ -1,9 +1,10 @@
-from cerberus.proxy.models import ToolCallEvent, EventDecision
 from cerberus.policy.opa_client import OPAClient
+from cerberus.proxy.models import EventDecision, ToolCallEvent
+
 
 class EnforcementPipeline:
     """Coordinates static scanner, ML engine, and OPA policy evaluation."""
-    
+
     def __init__(self, opa_client: OPAClient | None = None):
         self.opa_client = opa_client or OPAClient()
 
@@ -13,7 +14,7 @@ class EnforcementPipeline:
             event.decision = EventDecision.QUARANTINE
             event.decision_reason = "Quarantine: Critical behavioral drift anomaly detected"
             return EventDecision.QUARANTINE
-            
+
         decision, reason = await self.opa_client.evaluate(event)
         event.decision = decision
         event.decision_reason = reason

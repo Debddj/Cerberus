@@ -2,22 +2,23 @@ import re
 from typing import Any
 
 SECRET_PATTERNS = [
-    r'(?i)(api[_-]?key|token|secret|password|passwd|auth)\s*[=:]\s*([\'\"\w\-]{8,})',
-    r'(?i)bearer\s+([A-Za-z0-9_\-\.~+/=]{16,})',
-    r'-----BEGIN\s+(RSA\s+)?PRIVATE\s+KEY-----[\s\S]+?-----END\s+(RSA\s+)?PRIVATE\s+KEY-----',
-    r'ghp_[a-zA-Z0-9]{36}',
-    r'sk-[a-zA-Z0-9]{48}',
-    r'AIza[0-9A-Za-z_-]{35}',
-    r'AKIA[0-9A-Z]{16}',
+    r"(?i)(api[_-]?key|token|secret|password|passwd|auth)\s*[=:]\s*([\'\"\w\-]{8,})",
+    r"(?i)bearer\s+([A-Za-z0-9_\-\.~+/=]{16,})",
+    r"-----BEGIN\s+(RSA\s+)?PRIVATE\s+KEY-----[\s\S]+?-----END\s+(RSA\s+)?PRIVATE\s+KEY-----",
+    r"ghp_[a-zA-Z0-9]{36}",
+    r"sk-[a-zA-Z0-9]{48}",
+    r"AIza[0-9A-Za-z_-]{35}",
+    r"AKIA[0-9A-Z]{16}",
 ]
 
 COMPILED_PATTERNS = [re.compile(p) for p in SECRET_PATTERNS]
 
 SENSITIVE_KEY_KEYWORDS = ["api_key", "apikey", "token", "secret", "password", "passwd", "auth"]
 
+
 class SecretRedactor:
     """Redacts credentials, tokens, and PII from parameters and payloads before persistence."""
-    
+
     @classmethod
     def redact_text(cls, text: str) -> tuple[str, bool]:
         if not text:

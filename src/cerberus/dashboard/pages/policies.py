@@ -10,7 +10,8 @@ Policies remain in **Pending Review** until explicit human authorization is gran
 col1, col2 = st.columns([3, 1])
 with col1:
     st.subheader("Pending Policy: agent_triage_02.rego")
-    st.code("""
+    st.code(
+        """
 package cerberus.agent.agent_triage_02
 default allow = true
 
@@ -24,7 +25,9 @@ allowed_tools = {
 deny {
     not input.tool_name in allowed_tools
 }
-""", language="rego")
+""",
+        language="rego",
+    )
 
 with col2:
     st.write("Actions:")

@@ -22,9 +22,10 @@ reason = "Auto-synthesized policy: Tool is not in agent's observed baseline allo
 }
 """
 
+
 class PolicySynthesizer:
     """Synthesizes least-privilege Rego policies from observed agent baselines."""
-    
+
     @staticmethod
     def synthesize_rego(agent_id: str, observed_tools: set[str], generated_at: str) -> str:
         template = Template(REGO_TEMPLATE)
@@ -32,6 +33,6 @@ class PolicySynthesizer:
         return template.render(
             agent_id=agent_id,
             agent_safe_id=agent_safe_id,
-            allowed_tools=sorted(list(observed_tools)),
-            generated_at=generated_at
+            allowed_tools=sorted(observed_tools),
+            generated_at=generated_at,
         )

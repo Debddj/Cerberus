@@ -1,7 +1,8 @@
-import pytest
 import asyncio
+
 from cerberus.policy.opa_client import OPAClient
-from cerberus.proxy.models import ToolCallEvent, EventDecision
+from cerberus.proxy.models import EventDecision, ToolCallEvent
+
 
 def test_fail_closed_on_unreachable_opa():
     async def _run():
@@ -11,7 +12,7 @@ def test_fail_closed_on_unreachable_opa():
             agent_id="a1",
             tool_name="http_post",
             tool_server="srv",
-            risk_score=0.85
+            risk_score=0.85,
         )
         decision, reason = await client.evaluate(high_risk_event)
         assert decision == EventDecision.BLOCK

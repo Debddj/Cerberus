@@ -1,5 +1,6 @@
 from cerberus.proxy.redactor import SecretRedactor
 
+
 def test_secret_redaction():
     text = "Authorization: Bearer sk-ant-api03-abcdefghijklmn9876543210"
     redacted, modified = SecretRedactor.redact_text(text)

@@ -1,6 +1,7 @@
 from cerberus.behavioral.scorers.rule_based import RuleBasedScorer
 from cerberus.proxy.models import RuleFeatures
 
+
 def test_rule_based_exfiltration_pattern():
     features = RuleFeatures(
         tool_name="http_post",
@@ -12,7 +13,7 @@ def test_rule_based_exfiltration_pattern():
         destination_novelty=0.95,
         tool_novelty=0.9,
         destination_domain="evil.com",
-        prev_tools=["read_file"]
+        prev_tools=["read_file"],
     )
     score, factors = RuleBasedScorer.score(features)
     assert score >= 0.90
