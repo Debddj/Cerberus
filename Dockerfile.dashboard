@@ -2,11 +2,16 @@ FROM python:3.12-slim
 
 WORKDIR /app
 
-RUN pip install --no-cache-dir streamlit plotly requests httpx
+RUN apt-get update && apt-get install -y --no-install-recommends curl && rm -rf /var/lib/apt/lists/*
+RUN pip install --no-cache-dir uv
 
-COPY src/cerberus/dashboard/ ./dashboard
-COPY src/cerberus/narrative/ ./narrative
+COPY pyproject.toml README.md ./
+RUN uv pip install --system -e .
+
+COPY src/ ./src
+COPY policies/ ./policies
+COPY evaluation/ ./evaluation
 
 EXPOSE 8501
 
-CMD ["streamlit", "run", "dashboard/app.py", "--server.port=8501", "--server.address=0.0.0.0"]
+CMD ["streamlit", "run", "src/cerberus/dashboard/app.py", "--server.port=8501", "--server.address=0.0.0.0"]
