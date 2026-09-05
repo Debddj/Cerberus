@@ -16,10 +16,13 @@ class EventDecision(str, Enum):
 class ToolCallEvent(BaseModel):
     """Normalized intercepted tool call event."""
 
-    # Identity
+    # Identity & Trust
     event_id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     session_id: str = Field(description="Session or conversation identifier")
     agent_id: str = Field(description="Unique agent identifier")
+    trust_level: str = Field(
+        default="unverified", description="'verified' via HMAC token or 'unverified'"
+    )
 
     # Tool Invocation
     tool_name: str = Field(description="Target tool name")
@@ -101,6 +104,7 @@ class BaselineSnapshot(BaseModel):
     transition_matrix_path: str
     isolation_forest_path: str
     scaling_params_path: str
+    transformer_path: str = ""
     is_active: bool = False
 
 

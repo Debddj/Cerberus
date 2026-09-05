@@ -1,11 +1,14 @@
+import os
 from pathlib import Path
 
 import streamlit as st
 
-st.header("⚖️ OPA Policy Engine & Approval Gate")
+from cerberus.policy.synthesizer import PolicySynthesizer
+
+st.header("⚖️ OPA Policy Engine & Closed-Loop Approval Gate")
 st.markdown("""
 Manage base declarative Rego guardrails and review auto-synthesized least-privilege policies.
-All auto-generated policies remain **Pending** until an authorized operator approves them.
+All auto-generated policies remain **Pending** until an authorized operator approves or rejects them.
 """)
 
 tab_base, tab_auto = st.tabs(
@@ -27,47 +30,64 @@ with tab_base:
         st.info("No policy files discovered in policies/base.")
 
 with tab_auto:
-    st.subheader("Human Approval Gate: Pending Least-Privilege Policies")
+    st.subheader("Human Approval Gate: Pending Auto-Synthesized Policies")
     st.markdown("""
-    When an agent's behavioral profile reaches **Warm** status (>=100 safe calls),
-    Cerberus auto-synthesizes a least-privilege boundary locking the agent to observed tools and domains.
+    When an anomaly is blocked or an agent's behavioral profile reaches **Warm** status,
+    Cerberus automatically synthesizes defensive Rego rules to lock down permissions.
     """)
 
-    sample_policy = """# AUTO-GENERATED LEAST-PRIVILEGE POLICY (Pending Human Approval)
-package cerberus.agent.agent_coding_01
+    synthesizer = PolicySynthesizer(output_dir="policies/generated")
+    pending_policies = synthesizer.list_pending_policies()
 
-import rego.v1
+    if not pending_policies:
+        st.success(
+            "🎉 All auto-synthesized policies reviewed. No pending candidate rules awaiting operator approval."
+        )
+    else:
+        st.write(f"**{len(pending_policies)} Candidate Policies Awaiting Operator Review:**")
+        for pol in pending_policies:
+            pol_id = pol.get("policy_id", "unknown")
+            agent_id = pol.get("agent_id", "unknown")
+            tool_name = pol.get("tool_name", "unknown")
+            risk_score = pol.get("risk_score", 0.0)
+            created_at = pol.get("created_at", "N/A")
+            rego_path = pol.get("rego_path", "")
 
-default allow := false
+            with st.expander(
+                f"🛡️ Policy {pol_id} | Agent: `{agent_id}` | Tool: `{tool_name}` (Risk: {risk_score:.2f})",
+                expanded=True,
+            ):
+                col_meta1, col_meta2 = st.columns(2)
+                col_meta1.markdown(f"**Target Agent:** `{agent_id}`\n**Tool:** `{tool_name}`")
+                col_meta2.markdown(
+                    f"**Synthesized At:** `{created_at}`\n**Risk Score:** `{risk_score:.2f}`"
+                )
 
-allowed_tools := {
-    "read_file",
-    "write_file",
-    "run_tests",
-    "search_code"
-}
+                # Display rego code
+                if rego_path and os.path.exists(rego_path):
+                    with open(rego_path, "r", encoding="utf-8") as rf:
+                        rego_code = rf.read()
+                    st.code(rego_code, language="rego")
+                else:
+                    st.warning(f"Rego source file missing at {rego_path}")
 
-allowed_destinations := {
-    "github.com",
-    "api.internal-ci.net"
-}
+                col_appr, col_rej, col_spacer = st.columns([2, 2, 6])
+                if col_appr.button(
+                    "✅ Approve Policy", key=f"appr_{pol_id}", use_container_width=True
+                ):
+                    ok = synthesizer.approve_policy(pol_id)
+                    if ok:
+                        st.success(f"Policy {pol_id} approved and marked active!")
+                        st.rerun()
+                    else:
+                        st.error(f"Failed to approve policy {pol_id}")
 
-allow if {
-    input.tool_name in allowed_tools
-    not input.destination_domain
-}
-
-allow if {
-    input.tool_name in allowed_tools
-    input.destination_domain in allowed_destinations
-}
-"""
-    col_code, col_act = st.columns([3, 1])
-    with col_code:
-        st.code(sample_policy, language="rego")
-    with col_act:
-        st.write("Actions:")
-        if st.button("✅ Approve Policy"):
-            st.success("Policy approved! Promoted to active OPA distribution.")
-        if st.button("❌ Reject Policy"):
-            st.warning("Policy rejected. Baseline remains in observation mode.")
+                if col_rej.button(
+                    "❌ Reject Policy", key=f"rej_{pol_id}", use_container_width=True
+                ):
+                    ok = synthesizer.reject_policy(pol_id)
+                    if ok:
+                        st.warning(f"Policy {pol_id} rejected and archived.")
+                        st.rerun()
+                    else:
+                        st.error(f"Failed to reject policy {pol_id}")

@@ -8,14 +8,18 @@ class EnforcementPipeline:
     def __init__(self, opa_client: OPAClient | None = None):
         self.opa_client = opa_client or OPAClient()
 
-    async def enforce(self, event: ToolCallEvent) -> EventDecision:
+    async def enforce(
+        self,
+        event: ToolCallEvent,
+        static_scan: dict[str, bool] | None = None,
+    ) -> EventDecision:
         # High risk threshold directly triggers quarantine
         if (event.risk_score or 0.0) >= 0.90:
             event.decision = EventDecision.QUARANTINE
             event.decision_reason = "Quarantine: Critical behavioral drift anomaly detected"
             return EventDecision.QUARANTINE
 
-        decision, reason = await self.opa_client.evaluate(event)
+        decision, reason = await self.opa_client.evaluate(event, static_scan=static_scan)
         event.decision = decision
         event.decision_reason = reason
         return decision

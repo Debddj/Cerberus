@@ -74,3 +74,10 @@ desktop.ini
 *.swo
 
 *.jsonl
+
+# Encryption keys
+*.key
+
+# Versioned baseline snapshots generated at runtime
+baselines/*
+!baselines/.gitkeep

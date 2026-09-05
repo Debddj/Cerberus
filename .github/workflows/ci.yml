@@ -30,8 +30,8 @@ jobs:
 
       - name: Run Ruff Lint
         run: |
-          uv run ruff check src/ tests/
-          uv run ruff format --check src/ tests/
+          uv run ruff check src/ tests/ evaluation/ sandbox/
+          uv run ruff format --check src/ tests/ evaluation/ sandbox/
 
       - name: Run Mypy Typecheck
         run: |
@@ -46,9 +46,17 @@ jobs:
         run: |
           opa test policies/ -v
 
-      - name: Run Unit & Integration Tests
+      - name: Run Complete Test Suite (Unit, Integration, E2E, Fuzz, MCP Conformance)
         run: |
-          uv run pytest tests/unit/ tests/integration/ -v --cov=src/cerberus --cov-report=xml
+          uv run pytest tests/ -v --cov=src/cerberus --cov-report=xml
+
+      - name: Verify Empirical Ablation Study
+        run: |
+          uv run python evaluation/run_ablation.py --check
+
+      - name: Verify Adversarial Robustness Evaluation
+        run: |
+          uv run python evaluation/run_adversarial_eval.py
 
       - name: Upload coverage reports
         uses: codecov/codecov-action@v4

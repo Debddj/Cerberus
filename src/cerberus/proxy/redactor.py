@@ -32,6 +32,44 @@ class SecretRedactor:
         return res, modified
 
     @classmethod
+    def redact_value(cls, value: Any, parent_key: str = "") -> tuple[Any, list[str]]:
+        """Recursively redact a value of any type, returning (redacted_value, fields_modified)."""
+        fields_modified: list[str] = []
+
+        if isinstance(value, str):
+            redacted, was_modified = cls.redact_text(value)
+            if was_modified:
+                fields_modified.append(parent_key or "<root>")
+            return redacted, fields_modified
+
+        if isinstance(value, dict):
+            redacted_dict, dict_fields = cls.redact_dict(value)
+            if parent_key and dict_fields:
+                fields_modified.extend(f"{parent_key}.{f}" for f in dict_fields)
+            else:
+                fields_modified.extend(dict_fields)
+            return redacted_dict, fields_modified
+
+        if isinstance(value, list):
+            redacted_list, list_fields = cls.redact_list(value, parent_key)
+            fields_modified.extend(list_fields)
+            return redacted_list, fields_modified
+
+        return value, fields_modified
+
+    @classmethod
+    def redact_list(cls, data: list[Any], parent_key: str = "") -> tuple[list[Any], list[str]]:
+        """Recursively redact list elements."""
+        redacted: list[Any] = []
+        fields_modified: list[str] = []
+        for idx, item in enumerate(data):
+            item_key = f"{parent_key}[{idx}]" if parent_key else f"[{idx}]"
+            redacted_item, item_fields = cls.redact_value(item, item_key)
+            redacted.append(redacted_item)
+            fields_modified.extend(item_fields)
+        return redacted, fields_modified
+
+    @classmethod
     def redact_dict(cls, data: dict[str, Any]) -> tuple[dict[str, Any], list[str]]:
         redacted: dict[str, Any] = {}
         fields_redacted: list[str] = []
@@ -40,16 +78,21 @@ class SecretRedactor:
             if key_is_sensitive and isinstance(v, str):
                 redacted[k] = "[REDACTED_SECRET]"
                 fields_redacted.append(k)
-            elif isinstance(v, str):
-                v_str, mod = cls.redact_text(v)
-                redacted[k] = v_str
-                if mod:
-                    fields_redacted.append(k)
-            elif isinstance(v, dict):
-                v_dict, child_mods = cls.redact_dict(v)
-                redacted[k] = v_dict
-                if child_mods:
-                    fields_redacted.extend([f"{k}.{c}" for c in child_mods])
+            elif key_is_sensitive and isinstance(v, list):
+                # Sensitive key with list value — redact all elements
+                red_elements = []
+                for idx, el in enumerate(v):
+                    item_key = f"{k}[{idx}]"
+                    if isinstance(el, str):
+                        red_elements.append("[REDACTED_SECRET]")
+                        fields_redacted.append(item_key)
+                    else:
+                        red_val, ch_fields = cls.redact_value(el, item_key)
+                        red_elements.append(red_val)
+                        fields_redacted.extend(ch_fields)
+                redacted[k] = red_elements
             else:
-                redacted[k] = v
+                redacted_val, child_fields = cls.redact_value(v, k)
+                redacted[k] = redacted_val
+                fields_redacted.extend(child_fields)
         return redacted, fields_redacted

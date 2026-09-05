@@ -40,8 +40,13 @@ class FeatureExtractor:
         z_stats: dict[str, tuple[float, float]],  # name -> (mean, std)
     ) -> tuple[MarkovFeatures, IsolationForestFeatures, RuleFeatures]:
 
-        param_bytes = len(json.dumps(event.parameters).encode("utf-8"))
-        entropy = cls.extract_entropy(event.parameters)
+        # Prefer pre-computed values from the event, fall back to calculation if zero
+        param_bytes = event.parameter_size_bytes
+        entropy = event.parameter_entropy
+        if param_bytes == 0 and event.parameters:
+            param_bytes = len(json.dumps(event.parameters, sort_keys=True).encode("utf-8"))
+            entropy = cls.extract_entropy(event.parameters)
+
         tool_novelty = cls.calculate_novelty(tool_seen_count)
         dest_novelty = cls.calculate_novelty(dest_seen_count) if event.destination_domain else 0.0
 
@@ -60,7 +65,7 @@ class FeatureExtractor:
             return (val - mean) / (std if std != 0 else 1.0)
 
         isolation = IsolationForestFeatures(
-            param_size_bytes_z=z(param_bytes, "param_size"),
+            param_size_bytes_z=z(float(param_bytes), "param_size"),
             param_entropy_z=z(entropy, "entropy"),
             response_size_bytes_z=z(event.response_size_bytes or 0.0, "response_size"),
             time_since_previous_ms_z=z(event.time_since_previous_ms or 0.0, "time_diff"),

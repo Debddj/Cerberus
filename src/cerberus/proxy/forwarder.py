@@ -24,3 +24,7 @@ class UpstreamMCPForwarder:
         except Exception as e:
             logger.error(f"Failed to forward call to {server_url}: {e}")
             return {"error": {"code": -32000, "message": f"Upstream error: {e!s}"}}
+
+    async def close(self):
+        """Gracefully close the underlying httpx client."""
+        await self.client.aclose()
