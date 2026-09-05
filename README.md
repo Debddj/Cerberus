@@ -1,4 +1,4 @@
-# Cerberus 🛡️
+﻿# Cerberus 🛡️
 
 **A Runtime Behavioral Firewall for MCP-Based AI Agents**
 
@@ -21,13 +21,16 @@ AI agent (tool-calling loop)
         ▼
 Cerberus Interception Proxy ───────────────► Dashboard (attack narratives & audit)
         │
-   ┌────┼────────────┐
-   ▼    ▼             ▼
-Static  Behavioral   Policy Engine
-Scanner Engine       (Open Policy Agent)
-   │    │             │
-   └────┴─────────────┘
-        ▼
+   ┌────┴────────────────────────┐
+   ▼                             ▼
+Static Scanner            Behavioral Engine
+(Schema Pin, Trifecta)    (Markov, Isolation Forest, Transformer)
+   │                             │
+   └─────────────┬───────────────┘
+                 ▼
+          Policy Engine (OPA)
+                 │
+                 ▼
 MCP Tool Servers (GitHub, Databases, Slack, Webhooks)
 ```
 
@@ -41,6 +44,7 @@ Cerberus operates as an intelligent guardian gateway:
 3. **Behavioral ML Engine:**
    - **Markov Chain Scorer:** Evaluates categorical tool-to-tool transition probabilities with bounded sigmoid squashing.
    - **Isolation Forest Scorer:** Analyzes multi-dimensional continuous features (entropy, payload sizes, inter-call timing, novelty) scaled with per-agent z-scores.
+   - **Sequence Transformer Autoencoder:** Neural sequence representation learning detecting complex transition anomalies.
    - **Versioned Baselines with Stability Gating:** Protects against "boiling frog" baseline poisoning attacks by excluding flagged sessions.
 4. **Policy Engine (OPA):** Rego-based authorization with synthesized least-privilege policies, human approval checkpoints, and a **fail-closed default** during upstream outages.
 5. **Incident Narrative Reconstructor:** Rebuilds fragmented log streams into human-readable attack stories across reconnaissance, staging, and exfiltration phases.
@@ -61,7 +65,24 @@ Cerberus operates as an intelligent guardian gateway:
 
 ---
 
-## 4. Quickstart
+## 4. Benchmark & Evaluation Results
+
+Cerberus was benchmarked against standard attacks and adversarial evasion techniques across four agent archetypes (**Coding**, **Data Analysis**, **Customer Support**, and **Web Research / Triage**).
+
+| Metric | Measured Value | Design Target | Status |
+|---|---|---|---|
+| **Standard Attack Detection (TPR)** | **100.0%** | > 90.0% | [MET] |
+| **Adversarial Evasion Resistance (TPR)** | **66.7%** | > 50.0% | [MET] |
+| **Overall False Positive Rate (FPR)** | **0.00%** | < 5.0% | [MET] |
+| **P50 Latency Overhead** | **12.22 ms** | < 15.0 ms | [MET] |
+| **P95 Latency Overhead** | **14.02 ms** | < 25.0 ms | [MET] |
+| **P99 Latency Overhead** | **15.43 ms** | < 50.0 ms | [MET] |
+
+*Detailed benchmark breakdown and evasion analysis available in [docs/evaluation-report.md](docs/evaluation-report.md).*
+
+---
+
+## 5. Quickstart
 
 ### Prerequisites
 - Python 3.12+
@@ -71,7 +92,7 @@ Cerberus operates as an intelligent guardian gateway:
 ### Local Development Setup
 ```bash
 # Clone the repository
-git clone https://github.com/your-username/cerberus.git
+git clone https://github.com/Debddj/Cerberus.git
 cd cerberus
 
 # Install dependencies
@@ -79,15 +100,15 @@ uv venv
 uv pip install -e ".[dev]"
 
 # Run tests
-pytest tests/unit -v
+uv run pytest -v
 
-# Start the proxy locally
-make dev
+# Run evaluation benchmark
+uv run python evaluation/run_evaluation.py
 ```
 
 ### Running the Docker Sandbox
 ```bash
-make docker-up
+docker compose up -d
 ```
 - Proxy available at `http://localhost:8000`
 - Prometheus Metrics at `http://localhost:8000/metrics`
@@ -95,24 +116,24 @@ make docker-up
 
 ---
 
-## 5. Repository Structure
+## 6. Repository Structure
 
 ```
 cerberus/
-├── docs/                     # Architecture, threat models, API docs
+├── docs/                     # Architecture, threat models, evaluation report
 ├── policies/                 # Rego policies (base, generated, tests)
 ├── sandbox/                  # Dockerized mock MCP servers and test agents
 ├── src/cerberus/
-│   ├── behavioral/           # Markov, Isolation Forest, feature extraction
+│   ├── behavioral/           # Markov, Isolation Forest, Transformer, Scaling
 │   ├── dashboard/            # Streamlit real-time incident monitor
 │   ├── narrative/            # Attack story reconstruction engine
 │   ├── policy/               # OPA client and policy synthesizer
-│   ├── proxy/                # Interception gateway, logger, redactor
+│   ├── proxy/                # Interception gateway, logger, redactor, server
 │   └── scanner/              # Schema pinner, lethal trifecta detector
 └── tests/                    # Unit, integration, and E2E evasion test suites
 ```
 
 ---
 
-## 6. License
+## 7. License
 Licensed under the [Apache-2.0 License](LICENSE).

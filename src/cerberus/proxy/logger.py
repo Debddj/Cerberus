@@ -1,6 +1,5 @@
+import asyncio
 import json
-
-import aiofiles
 
 from cerberus.config import settings
 from cerberus.proxy.models import ToolCallEvent
@@ -13,8 +12,10 @@ class AuditLogger:
         self.log_path = log_path or settings.log_path
         self.db_path = db_path or settings.pins_db_path
 
+    def _sync_write(self, raw_line: str) -> None:
+        with open(self.log_path, mode="a", encoding="utf-8") as f:
+            f.write(raw_line + "\n")
+
     async def log_event(self, event: ToolCallEvent) -> None:
         raw_json = json.dumps(event.model_dump(mode="json"))
-        # Non-blocking append to JSON Lines file
-        async with aiofiles.open(self.log_path, mode="a", encoding="utf-8") as f:
-            await f.write(raw_json + "\n")
+        await asyncio.to_thread(self._sync_write, raw_json)

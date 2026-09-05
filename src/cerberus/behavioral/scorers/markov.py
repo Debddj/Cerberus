@@ -18,7 +18,7 @@ class MarkovScorer:
 
     @staticmethod
     def squash_surprise(
-        raw_surprise: float, midpoint: float = 4.0, steepness: float = 0.8
+        raw_surprise: float, midpoint: float = 6.0, steepness: float = 0.6
     ) -> float:
         """Applies sigmoid squashing: maps (-inf, +inf) -> (0, 1) cleanly."""
         try:
@@ -47,7 +47,7 @@ class MarkovScorer:
         squashed_score = self.squash_surprise(raw_surprise)
 
         factors = []
-        if squashed_score > 0.65:
+        if squashed_score > 0.70:
             factors.append(
                 f"Rare tool transition: '{curr}' following '{prev}' (surprise: {raw_surprise:.2f} bits)"
             )

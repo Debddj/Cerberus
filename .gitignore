@@ -72,3 +72,5 @@ desktop.ini
 .vscode/
 *.swp
 *.swo
+
+*.jsonl

@@ -18,8 +18,8 @@ class EnsembleScorer:
 
         all_factors = rule_factors + markov_factors + isolation_factors
 
-        # High threat circuit breaker: If any single engine detects extreme threat, escalate
-        if rule_score >= 0.90 or markov_score >= 0.90 or isolation_score >= 0.90:
+        # Circuit Breaker: Explicit heuristic rule violations (>= 0.75) or extreme ML statistical outliers (>= 0.90) escalate
+        if rule_score >= 0.75 or markov_score >= 0.90 or isolation_score >= 0.90:
             final_score = max(rule_score, markov_score, isolation_score)
             all_factors.append("Circuit Breaker: High-confidence anomaly from individual engine")
             return final_score, all_factors
