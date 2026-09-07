@@ -13,11 +13,12 @@ class UpstreamMCPForwarder:
         self.client = httpx.AsyncClient(timeout=30.0)
 
     async def forward_call(
-        self, server_url: str, method: str, params: dict[str, Any]
+        self, server_url: str, method: str, params: dict[str, Any], request_id: Any = 1
     ) -> dict[str, Any]:
         try:
             resp = await self.client.post(
-                server_url, json={"jsonrpc": "2.0", "id": 1, "method": method, "params": params}
+                server_url,
+                json={"jsonrpc": "2.0", "id": request_id, "method": method, "params": params},
             )
             resp.raise_for_status()
             return resp.json()

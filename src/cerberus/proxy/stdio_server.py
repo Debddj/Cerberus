@@ -6,6 +6,7 @@ and intercepts tool discovery and tool executions using CerberusProxyEngine.
 
 from __future__ import annotations
 
+from contextlib import asynccontextmanager
 import logging
 from typing import Any
 
@@ -19,7 +20,6 @@ from cerberus.proxy.models import EventDecision
 from cerberus.proxy.server import CerberusProxyEngine
 
 logger = logging.getLogger("cerberus.mcp_stdio")
-
 
 class CerberusStdioProxy:
     """Bridges client <-> Cerberus <-> Upstream MCP Server over stdio."""
@@ -40,6 +40,7 @@ class CerberusStdioProxy:
         self.agent_id = agent_id
         self.session_id = session_id
         self.server = Server("cerberus-stdio-firewall")
+        self._session: ClientSession | None = None
         self._setup_server_handlers()
 
     def _setup_server_handlers(self):
@@ -60,7 +61,13 @@ class CerberusStdioProxy:
         content = await self._proxy_call_tool(params.name, params.arguments or {})
         return types.CallToolResult(content=content)
 
-    async def _proxy_list_tools(self) -> list[types.Tool]:
+    @asynccontextmanager
+    async def _get_session(self):
+        """Yields active persistent session if running, or initializes ephemeral session."""
+        if self._session is not None:
+            yield self._session
+            return
+
         server_params = StdioServerParameters(
             command=self.command,
             args=self.args,
@@ -71,6 +78,10 @@ class CerberusStdioProxy:
             ClientSession(read, write) as session,
         ):
             await session.initialize()
+            yield session
+
+    async def _proxy_list_tools(self) -> list[types.Tool]:
+        async with self._get_session() as session:
             tools_res = await session.list_tools()
             server_id = f"stdio:{self.command}"
             for tool in tools_res.tools:
@@ -104,28 +115,34 @@ class CerberusStdioProxy:
             error_msg = f"[CERBERUS FIREWALL BLOCKED] {reason} (Risk: {score:.2f})"
             return [types.TextContent(type="text", text=error_msg)]
 
-        # Forward to upstream subprocess
-        server_params = StdioServerParameters(
-            command=self.command,
-            args=self.args,
-            env=self.env,
-        )
-        async with (
-            stdio_client(server_params) as (read, write),
-            ClientSession(read, write) as session,
-        ):
-            await session.initialize()
+        # Forward to persistent or active session
+        async with self._get_session() as session:
             call_res = await session.call_tool(name, arguments)
             return list(call_res.content)
 
     async def run(self):
         await self.engine.initialize()
-        async with stdio_server() as (read_stream, write_stream):
-            init_options = self.server.create_initialization_options(
-                notification_options=None,
-                experimental_capabilities={},
-            )
-            await self.server.run(read_stream, write_stream, init_options)
+        server_params = StdioServerParameters(
+            command=self.command,
+            args=self.args,
+            env=self.env,
+        )
+        # Persistent upstream connection session across the entire lifetime of stdio proxy
+        async with (
+            stdio_client(server_params) as (read, write),
+            ClientSession(read, write) as session,
+        ):
+            await session.initialize()
+            self._session = session
+            try:
+                async with stdio_server() as (read_stream, write_stream):
+                    init_options = self.server.create_initialization_options(
+                        notification_options=None,
+                        experimental_capabilities={},
+                    )
+                    await self.server.run(read_stream, write_stream, init_options)
+            finally:
+                self._session = None
 
 
 async def run_stdio_proxy(command: str, args: list[str] | None = None):

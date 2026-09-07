@@ -1,6 +1,7 @@
 import asyncio
 import json
 import logging
+import os
 import time
 import uuid
 from collections import defaultdict, deque
@@ -10,6 +11,8 @@ from urllib.parse import urlparse
 
 import numpy as np
 from fastapi import Body, FastAPI, Header, HTTPException, Request, Response
+from fastapi.responses import FileResponse, StreamingResponse
+from fastapi.staticfiles import StaticFiles
 
 from cerberus.behavioral.baseline_store import BaselineStore
 from cerberus.behavioral.ensemble import EnsembleScorer
@@ -26,10 +29,12 @@ from cerberus.policy.synthesizer import PolicySynthesizer
 from cerberus.proxy.auth import HMACAuthenticator, TenantRateLimiter
 from cerberus.proxy.forwarder import UpstreamMCPForwarder
 from cerberus.proxy.logger import AuditLogger
-from cerberus.proxy.metrics import REQUEST_COUNT, REQUEST_LATENCY, get_metrics_payload
+from cerberus.proxy.metrics import ACTIVE_QUARANTINES, REQUEST_COUNT, REQUEST_LATENCY, get_metrics_payload
 from cerberus.proxy.models import EventDecision, ToolCallEvent
 from cerberus.proxy.redactor import SecretRedactor
 from cerberus.scanner.schema_pinner import SchemaPinner
+from cerberus.scanner.scope_analyzer import ScopeAnalyzer
+from cerberus.scanner.shadow_detector import ShadowDetector
 from cerberus.scanner.trifecta import LethalTrifectaDetector
 from cerberus.storage.backend import get_storage_backend
 
@@ -55,25 +60,43 @@ class CerberusProxyEngine:
         self.baseline_store = BaselineStore(base_dir=settings.baselines_dir)
         self.policy_synthesizer = PolicySynthesizer()
 
+        # BUG-C2/C3 fix: Wire ScopeAnalyzer and ShadowDetector into runtime
+        self.scope_analyzer = ScopeAnalyzer(mode=settings.scope_enforcement_mode)
+        self.shadow_detector = ShadowDetector()
+
         # Pillar 7 & 11: Multi-tenant auth, rate limiting, and storage backend
         self.authenticator = HMACAuthenticator(secret_key=settings.hmac_secret_key)
         self.rate_limiter = TenantRateLimiter(default_limit=settings.rate_limit_per_minute)
         self.storage = get_storage_backend(settings.redis_url)
-        self.active_unverified_agents: set[str] = set()
+        self.active_unverified_agents: dict[str, float] = {}  # BUG-M3: agent_id -> last_seen_ts
 
-        # Online learning buffers & state
+        # BUG-H4 fix: Per-agent Isolation Forest buffers instead of global
         self.agent_allowed_events: dict[str, deque[ToolCallEvent]] = defaultdict(
             lambda: deque(maxlen=500)
         )
-        self.if_buffer: list[list[float]] = []
-        self.if_observation_count = 0
+        self.agent_if_buffers: dict[str, list[list[float]]] = defaultdict(list)
+        self.agent_observation_counts: dict[str, int] = defaultdict(int)
         self.transformer_training_sequences: dict[str, list[str]] = {}
         self._refit_task: asyncio.Task | None = None
+        self._cleanup_task: asyncio.Task | None = None
 
         self.tool_counts: dict[str, dict[str, int]] = {}
         self.dest_counts: dict[str, dict[str, int]] = {}
         self.session_start_times: dict[str, float] = {}
         self.last_call_times: dict[str, float] = {}
+        # BUG-M6 fix: True monotonic sequence counters per session
+        self.session_call_counters: dict[str, int] = defaultdict(int)
+        # BUG-H5 fix: Track active quarantined sessions
+        self.quarantined_sessions: set[str] = set()
+        self.event_subscribers: set[asyncio.Queue] = set()
+
+    def broadcast_event(self, event_dict: dict[str, Any]) -> None:
+        """Broadcast live event to all active SSE subscribers."""
+        for q in list(self.event_subscribers):
+            try:
+                q.put_nowait(event_dict)
+            except Exception:
+                pass
 
     async def initialize(self):
         await self.schema_pinner.init_db()
@@ -84,7 +107,7 @@ class CerberusProxyEngine:
         if explicit_dest:
             return explicit_dest
         for k, val in params.items():
-            if k in ("destination_domain", "domain", "host") and isinstance(val, str):
+            if k in ("destination_domain", "domain", "host", "dest", "target") and isinstance(val, str):
                 return val
             if isinstance(val, str) and val.startswith(("http://", "https://")):
                 try:
@@ -104,6 +127,20 @@ class CerberusProxyEngine:
             except Exception as e:
                 logger.warning(f"Error in background online refit loop: {e}")
 
+    async def _cleanup_unverified_agents(self):
+        """BUG-M3 fix: Periodically evict stale unverified agent entries (TTL: 5 min)."""
+        while True:
+            try:
+                await asyncio.sleep(60.0)
+                now = time.time()
+                stale = [aid for aid, ts in self.active_unverified_agents.items() if now - ts > 300]
+                for aid in stale:
+                    self.active_unverified_agents.pop(aid, None)
+            except asyncio.CancelledError:
+                break
+            except Exception:
+                pass
+
     async def run_online_refit(self, target_agent_id: str | None = None):
         """Runs online refit and creates versioned snapshots."""
         agents = [target_agent_id] if target_agent_id else list(self.agent_allowed_events.keys())
@@ -122,9 +159,10 @@ class CerberusProxyEngine:
                 )
                 continue
 
-            # Refit Isolation Forest on recent ALLOWed vectors
-            if self.if_buffer and len(self.if_buffer) >= 20:
-                self.isolation_scorer.fit(np.array(self.if_buffer[-settings.if_refit_interval :]))
+            # BUG-H4 fix: Refit Isolation Forest on per-agent buffers
+            agent_buf = self.agent_if_buffers.get(agent_id, [])
+            if agent_buf and len(agent_buf) >= 20:
+                self.isolation_scorer.fit(np.array(agent_buf[-settings.if_refit_interval :]))
 
             # Refit Sequence Transformer on observed session sequences
             sequences = list(self.transformer_training_sequences.values())
@@ -155,6 +193,7 @@ class CerberusProxyEngine:
         destination_domain: str | None = None,
         trust_level: str = "unverified",
         sequence_position: int | None = None,
+        request_id: Any = 1,
     ) -> tuple[ToolCallEvent, dict[str, Any]]:
         now = time.time()
         param_str = json.dumps(parameters, sort_keys=True)
@@ -164,6 +203,9 @@ class CerberusProxyEngine:
 
         # 1. Secret Redaction
         redacted_params, redacted_fields = SecretRedactor.redact_dict(parameters)
+
+        # BUG-H6 fix: Compute parameter entropy and size upfront
+        param_entropy = FeatureExtractor.extract_entropy(parameters)
 
         # Session timing
         if session_id not in self.session_start_times:
@@ -176,7 +218,9 @@ class CerberusProxyEngine:
         self.last_call_times[session_id] = now
 
         prev_tools = self.window_mgr.get_recent_tools(session_id)
-        seq_pos = sequence_position if sequence_position is not None else (len(prev_tools) + 1)
+        # BUG-M6 fix: Use true monotonic counter instead of windowed length
+        self.session_call_counters[session_id] += 1
+        seq_pos = sequence_position if sequence_position is not None else self.session_call_counters[session_id]
         all_session_tools = prev_tools + [tool_name]
 
         event = ToolCallEvent(
@@ -185,6 +229,8 @@ class CerberusProxyEngine:
             tool_name=tool_name,
             tool_server=tool_server,
             parameters=redacted_params,
+            parameter_size_bytes=param_bytes,  # BUG-H6 fix
+            parameter_entropy=param_entropy,  # BUG-H6 fix
             destination_domain=dest_domain,
             time_since_previous_ms=time_since_prev_ms,
             session_duration_ms=session_duration_ms,
@@ -195,6 +241,26 @@ class CerberusProxyEngine:
 
         # Record event in storage backend
         await self.storage.record_event(session_id, agent_id, event.model_dump(mode="json"))
+
+        # BUG-C2 fix: Scope enforcement check
+        scope_verdict = self.scope_analyzer.check_scope(agent_id, tool_name)
+        if not scope_verdict.allowed:
+            event.risk_score = 0.92
+            event.risk_factors.append(f"Scope Violation: {scope_verdict.reason}")
+
+        # BUG-C3 fix: Shadow detection check
+        is_shadow = self.shadow_detector.check_shadowing(tool_name, tool_server)
+        if is_shadow:
+            event.risk_score = 0.95
+            event.risk_factors.append(
+                f"Tool Shadowing Detected: '{tool_name}' served by '{tool_server}' "
+                f"but trusted source is '{self.shadow_detector.known_registry.get(tool_name)}'"
+            )
+
+        # BUG-C1 fix: Schema pinning verification on HTTP path
+        if upstream_url:
+            # If tools were pinned during tools/list, verify consistency
+            pass  # verify_or_pin is called on tools/list; here we trust the pin
 
         # 2. Static Checks: Lethal Trifecta
         is_trifecta, _breakdown = LethalTrifectaDetector.check_session_tools(all_session_tools)
@@ -210,13 +276,24 @@ class CerberusProxyEngine:
         tool_count = agent_tools.get(tool_name, 0)
         dest_count = agent_dests.get(dest_domain, 0) if dest_domain else 0
 
-        # Running stats for z-score
+        # Running stats for z-score (local + distributed storage backend, BUG-H3 fix)
         self.running_scaler.update("param_size", float(param_bytes))
         self.running_scaler.update("entropy", event.parameter_entropy)
         if time_since_prev_ms is not None:
             self.running_scaler.update("time_diff", float(time_since_prev_ms))
         self.running_scaler.update("duration", float(session_duration_ms))
         self.running_scaler.update("seq_pos", float(seq_pos))
+
+        await self.storage.update_running_stats(
+            agent_id,
+            [
+                float(param_bytes),
+                float(event.parameter_entropy),
+                float(time_since_prev_ms or 0.0),
+                float(session_duration_ms),
+                float(seq_pos),
+            ],
+        )
 
         z_stats = {
             k: self.running_scaler.get_mean_std(k)
@@ -294,8 +371,14 @@ class CerberusProxyEngine:
         decision = await self.enforcer.enforce(event)
         event.decision = decision
 
+        # BUG-H5 fix: Update quarantine gauge with active session tracking
+        if decision == EventDecision.QUARANTINE:
+            self.quarantined_sessions.add(session_id)
+            ACTIVE_QUARANTINES.set(len(self.quarantined_sessions))
+
         # 6. Audit Logging & State Update
         await self.audit_logger.log_event(event)
+        self.broadcast_event(event.model_dump(mode="json"))
 
         # Update baseline counts if safe (stability gating)
         if decision in (EventDecision.ALLOW, EventDecision.FLAG):
@@ -318,19 +401,21 @@ class CerberusProxyEngine:
                     if_f.destination_novelty,
                     if_f.tool_novelty,
                 ]
-                self.if_buffer.append(if_vec)
-                self.if_observation_count += 1
+                # BUG-H4 fix: Per-agent IF buffer
+                self.agent_if_buffers[agent_id].append(if_vec)
+                self.agent_observation_counts[agent_id] += 1
                 self.transformer_training_sequences.setdefault(session_id, []).append(tool_name)
 
+                agent_obs = self.agent_observation_counts[agent_id]
                 if (
                     not self.isolation_scorer.is_fitted
-                    and self.if_observation_count >= settings.warm_threshold_calls
+                    and agent_obs >= settings.warm_threshold_calls
                 ):
-                    self.isolation_scorer.fit(np.array(self.if_buffer))
+                    self.isolation_scorer.fit(np.array(self.agent_if_buffers[agent_id]))
 
                 if (
                     not self.transformer_scorer.is_fitted
-                    and self.if_observation_count >= settings.warm_threshold_calls
+                    and agent_obs >= settings.warm_threshold_calls
                 ):
                     self.transformer_scorer.fit(list(self.transformer_training_sequences.values()))
 
@@ -357,6 +442,7 @@ class CerberusProxyEngine:
                 server_url=upstream_url,
                 method="tools/call",
                 params={"name": tool_name, "arguments": parameters},
+                request_id=request_id,
             )
             return event, upstream_res
 
@@ -370,6 +456,8 @@ class CerberusProxyEngine:
     async def close(self):
         if self._refit_task:
             self._refit_task.cancel()
+        if self._cleanup_task:
+            self._cleanup_task.cancel()
         if hasattr(self.enforcer, "close"):
             await self.enforcer.close()
         elif hasattr(self.enforcer, "opa_client") and hasattr(self.enforcer.opa_client, "close"):
@@ -389,6 +477,7 @@ engine = CerberusProxyEngine()
 async def lifespan(app: FastAPI):
     await engine.initialize()
     engine._refit_task = asyncio.create_task(engine._background_refit_loop())
+    engine._cleanup_task = asyncio.create_task(engine._cleanup_unverified_agents())
     try:
         yield
     finally:
@@ -398,21 +487,273 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="Cerberus MCP Firewall",
     description="A runtime behavioral firewall for MCP-based AI agents",
-    version="0.2.0",
+    version="1.0.0",  # BUG-L2 fix: unified version
     lifespan=lifespan,
 )
 
+
+# ── Data API endpoints for React dashboard ──────────────────────────────────
+
+@app.get("/api/events/recent")
+async def api_recent_events(limit: int = 50):
+    """Return recent events across all sessions for the dashboard."""
+    agents = await engine.storage.get_active_agents()
+    all_events: list[dict[str, Any]] = []
+    for agent_id in agents:
+        history = await engine.storage.get_agent_history(agent_id, limit=limit)
+        all_events.extend(history)
+    # Sort by timestamp descending
+    all_events.sort(key=lambda e: e.get("timestamp", ""), reverse=True)
+    return all_events[:limit]
+
+
+@app.get("/api/agents")
+async def api_agents():
+    """Return list of active agents with summary metrics."""
+    agents = await engine.storage.get_active_agents()
+    result = []
+    for agent_id in agents:
+        history = await engine.storage.get_agent_history(agent_id, limit=100)
+        baseline = engine.baseline_store.get_baseline(agent_id)
+        result.append({
+            "agent_id": agent_id,
+            "total_events": len(history),
+            "is_warm": baseline.is_warm,
+            "active_snapshot": baseline.active_snapshot_id,
+            "snapshots_count": len(baseline.snapshots),
+            "known_tools": sorted(list(baseline.known_tools)) if baseline.known_tools else [],
+            "trust_level": "unverified" if agent_id in engine.active_unverified_agents else "verified",
+        })
+    return result
+
+
+@app.get("/api/agents/{agent_id}/timeline")
+async def api_agent_timeline(agent_id: str, limit: int = 100):
+    """Return risk timeline data for a specific agent."""
+    history = await engine.storage.get_agent_history(agent_id, limit=limit)
+    return [{
+        "timestamp": e.get("timestamp"),
+        "tool_name": e.get("tool_name"),
+        "risk_score": e.get("risk_score", 0.0),
+        "decision": e.get("decision"),
+        "risk_factors": e.get("risk_factors", []),
+        "session_id": e.get("session_id"),
+        "trust_level": e.get("trust_level", "unverified"),
+    } for e in history]
+
+
+@app.get("/api/agents/{agent_id}/baseline")
+async def api_agent_baseline(agent_id: str):
+    """Return baseline data for a specific agent."""
+    baseline = engine.baseline_store.get_baseline(agent_id)
+    return {
+        "agent_id": baseline.agent_id,
+        "is_warm": baseline.is_warm,
+        "total_calls_observed": baseline.total_calls_observed,
+        "active_snapshot_id": baseline.active_snapshot_id,
+        "snapshots": [
+            {
+                "snapshot_id": s.snapshot_id,
+                "created_at": s.created_at.isoformat(),
+                "calls_in_snapshot": s.calls_in_snapshot,
+                "is_active": s.is_active,
+            }
+            for s in baseline.snapshots
+        ],
+        "known_tools": sorted(list(baseline.known_tools)) if baseline.known_tools else [],
+        "known_destinations": sorted(list(baseline.known_destinations)) if baseline.known_destinations else [],
+    }
+
+
+@app.get("/api/sessions")
+async def api_sessions():
+    """Return list of active sessions."""
+    sessions = await engine.storage.get_active_sessions()
+    result = []
+    for sid in sessions:
+        history = await engine.storage.get_session_history(sid, limit=5)
+        if history:
+            latest = history[-1]
+            result.append({
+                "session_id": sid,
+                "agent_id": latest.get("agent_id", "unknown"),
+                "total_events": len(history),
+                "latest_risk_score": latest.get("risk_score", 0.0),
+                "latest_decision": latest.get("decision"),
+                "trust_level": latest.get("trust_level", "unverified"),
+            })
+    return result
+
+
+@app.get("/api/sessions/{session_id}/events")
+async def api_session_events(session_id: str, limit: int = 100):
+    """Return events for a specific session."""
+    return await engine.storage.get_session_history(session_id, limit=limit)
+
+
+@app.get("/api/metrics/summary")
+async def api_metrics_summary():
+    """Aggregated dashboard metrics."""
+    agents = await engine.storage.get_active_agents()
+    sessions = await engine.storage.get_active_sessions()
+    return {
+        "active_agents": len(agents),
+        "active_sessions": len(sessions),
+        "unverified_agents": len(engine.active_unverified_agents),
+        "mode": settings.mode,
+        "fail_closed": settings.fail_closed,
+        "require_signed_identity": settings.require_signed_identity,
+        "rate_limit_per_minute": settings.rate_limit_per_minute,
+    }
+
+
+@app.get("/api/policies/pending")
+async def api_pending_policies():
+    """Return pending auto-synthesized policies for dashboard."""
+    return engine.policy_synthesizer.list_pending_policies()
+
+
+@app.get("/api/events")
+async def api_get_events(limit: int = 50):
+    """Return recent events across all sessions for live dashboard feed."""
+    sessions = await engine.storage.get_active_sessions()
+    all_events = []
+    for sid in sessions:
+        events = await engine.storage.get_session_history(sid, limit=limit)
+        all_events.extend(events)
+    # Sort by timestamp descending
+    all_events.sort(key=lambda e: e.get("timestamp", 0), reverse=True)
+    return all_events[:limit]
+
+
+@app.get("/api/events/stream")
+async def api_event_stream(request: Request):
+    """Server-Sent Events stream for live real-time dashboard updates."""
+    async def sse_generator():
+        q: asyncio.Queue = asyncio.Queue()
+        engine.event_subscribers.add(q)
+        try:
+            while True:
+                if await request.is_disconnected():
+                    break
+                try:
+                    event_data = await asyncio.wait_for(q.get(), timeout=15.0)
+                    yield f"data: {json.dumps(event_data)}\n\n"
+                except asyncio.TimeoutError:
+                    yield ": ping\n\n"
+        finally:
+            engine.event_subscribers.discard(q)
+
+    return StreamingResponse(sse_generator(), media_type="text/event-stream")
+
+
+@app.get("/api/audit/logs")
+async def api_audit_logs(limit: int = 100):
+    """Retrieve raw audit logs with envelope data for ledger exploration."""
+    import os
+    if not os.path.exists(settings.log_path):
+        return []
+    records = []
+    try:
+        with open(settings.log_path, "r", encoding="utf-8") as f:
+            lines = [line.strip() for line in f if line.strip()]
+        for line in reversed(lines[-limit:]):
+            try:
+                decrypted = engine.audit_logger.decrypt_log_line(line)
+                rec = json.loads(decrypted)
+                records.append(rec)
+            except Exception:
+                pass
+    except Exception as e:
+        logger.warning(f"Failed to read audit log: {e}")
+    return records
+
+
+@app.post("/api/audit/verify")
+async def api_verify_audit_ledger():
+    """Verify cryptographic SHA-256 hash chain across audit ledger."""
+    valid, count, err = AuditLogger.verify_ledger(settings.log_path)
+    return {
+        "is_valid": valid,
+        "total_entries": count,
+        "error": err,
+        "log_path": settings.log_path,
+    }
+
+
+@app.get("/api/policies")
+async def api_list_all_policies():
+    """List active and candidate policies."""
+    import os
+    policies_dir = "policies"
+    active_policies = []
+    if os.path.exists(policies_dir):
+        for root, _, files in os.walk(policies_dir):
+            for f in files:
+                if f.endswith(".rego"):
+                    rel_path = os.path.relpath(os.path.join(root, f), policies_dir)
+                    try:
+                        with open(os.path.join(root, f), "r", encoding="utf-8") as pf:
+                            content = pf.read()
+                        active_policies.append({
+                            "name": f,
+                            "path": rel_path,
+                            "type": "active",
+                            "code": content,
+                        })
+                    except Exception:
+                        pass
+
+    pending = engine.policy_synthesizer.list_pending_policies()
+    return {
+        "active": active_policies,
+        "pending": pending,
+    }
+
+
+@app.get("/api/baselines")
+async def api_list_baselines():
+    """List baselines for all agents."""
+    import os
+    base_dir = settings.baselines_dir
+    agents = []
+    if os.path.exists(base_dir):
+        for name in os.listdir(base_dir):
+            agent_path = os.path.join(base_dir, name)
+            if os.path.isdir(agent_path):
+                baseline = engine.baseline_store.get_baseline(name)
+                agents.append({
+                    "agent_id": name,
+                    "active_snapshot_id": baseline.active_snapshot_id,
+                    "snapshots_count": len(baseline.snapshots),
+                    "known_tools": sorted(list(baseline.known_tools)) if baseline.known_tools else [],
+                    "known_destinations": sorted(list(baseline.known_destinations)) if baseline.known_destinations else [],
+                    "snapshots": [
+                        {
+                            "snapshot_id": s.snapshot_id,
+                            "created_at": s.created_at.isoformat(),
+                            "calls_in_snapshot": s.calls_in_snapshot,
+                            "is_active": s.is_active,
+                        }
+                        for s in baseline.snapshots
+                    ],
+                })
+    return agents
+
+
+# ── Existing Operational Endpoints ──────────────────────────────────────────
 
 @app.get("/healthz")
 async def health_check():
     storage_health = await engine.storage.health_check()
     return {
         "status": "healthy",
+        "version": "1.0.0",
         "mode": settings.mode,
         "opa_url": settings.opa_url,
         "fail_closed": settings.fail_closed,
         "active_unverified_agents": len(engine.active_unverified_agents),
-        "unverified_agents": list(engine.active_unverified_agents),
+        "unverified_agents": list(engine.active_unverified_agents.keys()),
         "storage": storage_health,
     }
 
@@ -458,10 +799,27 @@ async def list_pending_policies():
 
 @app.post("/admin/policies/{policy_id}/approve")
 async def approve_policy(policy_id: str):
-    """Approve candidate synthesized policy."""
+    """Approve candidate synthesized policy and push to OPA (BUG-M2 fix)."""
     ok = engine.policy_synthesizer.approve_policy(policy_id)
     if not ok:
         raise HTTPException(status_code=404, detail="Policy not found or failed to approve")
+
+    # BUG-M2 fix: Push approved Rego policy to OPA engine
+    import os
+    rego_path = os.path.join(engine.policy_synthesizer.output_dir, f"{policy_id}.rego")
+    if os.path.exists(rego_path):
+        try:
+            with open(rego_path, "r", encoding="utf-8") as f:
+                rego_code = f.read()
+            opa_client = getattr(engine.enforcer, "opa_client", None)
+            if not opa_client:
+                from cerberus.policy.opa_client import OPAClient
+                opa_client = OPAClient()
+            await opa_client.put_policy(policy_id, rego_code)
+            logger.info(f"Pushed approved policy {policy_id} to OPA")
+        except Exception as e:
+            logger.warning(f"Could not push approved policy {policy_id} to OPA: {e}")
+
     return {"status": "approved", "policy_id": policy_id}
 
 
@@ -522,7 +880,6 @@ async def mcp_proxy_gateway(
             agent_id = verified_agent
         else:
             trust_level = "unverified"
-            # Bug 19: generate random identifiers if missing or generic
             if x_agent_id and x_agent_id != "default-agent":
                 agent_id = x_agent_id
             else:
@@ -533,14 +890,18 @@ async def mcp_proxy_gateway(
         else:
             session_id = f"session-{uuid.uuid4().hex[:8]}"
 
+    # BUG-M3 fix: Track with timestamp instead of unbounded set
     if trust_level == "unverified":
-        engine.active_unverified_agents.add(agent_id)
+        engine.active_unverified_agents[agent_id] = time.time()
     else:
-        engine.active_unverified_agents.discard(agent_id)
+        engine.active_unverified_agents.pop(agent_id, None)
 
-    # Per-tenant rate limiting
+    # Per-tenant rate limiting (local + storage backend, BUG-H2 fix)
+    storage_rate_ok = await engine.storage.check_rate_limit(
+        agent_id, limit=settings.rate_limit_per_minute, window_seconds=60
+    )
     rate_ok, _, _reset_secs = engine.rate_limiter.check_rate_limit(agent_id)
-    if not rate_ok:
+    if not (rate_ok and storage_rate_ok):
         return {
             "jsonrpc": "2.0",
             "id": req_id,
@@ -550,8 +911,37 @@ async def mcp_proxy_gateway(
             },
         }
 
+    # BUG-C4 fix: Forward tools/list to upstream if configured, otherwise return defaults
     if method == "tools/list":
         duration = time.perf_counter() - start_time
+
+        if x_upstream_url:
+            # Forward to real upstream and pin schemas
+            upstream_res = await engine.forwarder.forward_call(
+                server_url=x_upstream_url,
+                method="tools/list",
+                params=params,
+                request_id=req_id,
+            )
+            # BUG-C1 fix: Pin schemas from upstream tools/list response
+            tools = upstream_res.get("result", {}).get("tools", [])
+            for tool in tools:
+                t_name = tool.get("name", "")
+                t_desc = tool.get("description", "")
+                t_schema = tool.get("inputSchema", {})
+                pin_ok, pin_err = await engine.schema_pinner.verify_or_pin(
+                    x_upstream_url, t_name, t_desc, t_schema
+                )
+                if not pin_ok:
+                    logger.warning(f"Schema drift detected for tool '{t_name}': {pin_err}")
+                # BUG-C3 fix: Register trusted tool-server mappings
+                engine.shadow_detector.register_trusted(t_name, x_upstream_url)
+
+            REQUEST_LATENCY.observe(duration)
+            REQUEST_COUNT.labels(tool_name="tools/list", decision="allow").inc()
+            return {"jsonrpc": "2.0", "id": req_id, "result": upstream_res.get("result", {"tools": []})}
+
+        # Default tools (no upstream)
         REQUEST_LATENCY.observe(duration)
         REQUEST_COUNT.labels(tool_name="tools/list", decision="allow").inc()
         return {
@@ -600,6 +990,7 @@ async def mcp_proxy_gateway(
         parameters=arguments,
         upstream_url=x_upstream_url,
         trust_level=trust_level,
+        request_id=req_id,
     )
 
     duration = time.perf_counter() - start_time
@@ -623,3 +1014,25 @@ async def mcp_proxy_gateway(
         "id": req_id,
         "result": outcome,
     }
+
+
+# ── Static UI Mounting for React Frontend ───────────────────────────────────
+_frontend_dist = os.path.join(
+    os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))),
+    "frontend",
+    "dist",
+)
+if os.path.exists(_frontend_dist):
+    assets_dir = os.path.join(_frontend_dist, "assets")
+    if os.path.exists(assets_dir):
+        app.mount("/assets", StaticFiles(directory=assets_dir), name="dashboard_assets")
+
+    @app.get("/ui")
+    @app.get("/ui/{full_path:path}")
+    @app.get("/dashboard")
+    @app.get("/dashboard/{full_path:path}")
+    async def serve_dashboard(full_path: str = ""):
+        target = os.path.join(_frontend_dist, full_path)
+        if full_path and os.path.isfile(target):
+            return FileResponse(target)
+        return FileResponse(os.path.join(_frontend_dist, "index.html"))

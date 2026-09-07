@@ -24,7 +24,10 @@ class HMACAuthenticator:
             self.secret_key = self._get_or_create_key()
 
     def _get_or_create_key(self) -> str:
-        key_file = "cerberus_hmac.key"
+        key_file = settings.hmac_key_file_path
+        if not key_file:
+            log_dir = os.path.dirname(os.path.abspath(settings.log_path)) if settings.log_path else "."
+            key_file = os.path.join(log_dir, "cerberus_hmac.key")
         if os.path.exists(key_file):
             with open(key_file, "r", encoding="utf-8") as f:
                 key = f.read().strip()

@@ -100,7 +100,7 @@ class BaselineStore:
             return True, f"Stability verified (max TVD: {max_tvd:.3f})"
         except Exception as e:
             logger.warning(f"Error checking baseline stability: {e}")
-            return True, f"Stability check error, fail-open on metric: {e}"
+            return False, f"Stability check failed (fail-closed on error): {e}"
 
     def create_snapshot(
         self,

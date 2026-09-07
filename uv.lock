@@ -144,14 +144,13 @@ wheels = [
 
 [[package]]
 name = "cerberus-firewall"
-version = "0.1.0"
+version = "1.0.0"
 source = { editable = "." }
 dependencies = [
     { name = "aiosqlite" },
     { name = "cryptography" },
     { name = "fastapi" },
     { name = "httpx" },
-    { name = "hypothesis" },
     { name = "jinja2" },
     { name = "joblib" },
     { name = "mcp" },
@@ -167,6 +166,7 @@ dependencies = [
 
 [package.optional-dependencies]
 dev = [
+    { name = "hypothesis" },
     { name = "mypy" },
     { name = "pytest" },
     { name = "pytest-asyncio" },
@@ -180,7 +180,7 @@ requires-dist = [
     { name = "cryptography", specifier = ">=43.0.0" },
     { name = "fastapi", specifier = ">=0.115.0" },
     { name = "httpx", specifier = ">=0.28.0" },
-    { name = "hypothesis", specifier = ">=6.167.1" },
+    { name = "hypothesis", marker = "extra == 'dev'", specifier = ">=6.167.1" },
     { name = "jinja2", specifier = ">=3.1.4" },
     { name = "joblib", specifier = ">=1.4.0" },
     { name = "mcp", specifier = ">=1.28.0" },

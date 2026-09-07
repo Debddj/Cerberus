@@ -6,10 +6,13 @@ class NarrativeReconstructor:
 
     @classmethod
     def reconstruct(cls, events: list[ToolCallEvent]) -> str:
+        if not events:
+            return "INCIDENT NARRATIVE — No events recorded."
+
         lines = [
             "=" * 60,
-            f"INCIDENT NARRATIVE — Session {events[0].session_id if events else 'N/A'}",
-            f"Agent: {events[0].agent_id if events else 'N/A'} | Total Intercepted Calls: {len(events)}",
+            f"INCIDENT NARRATIVE — Session {events[0].session_id}",
+            f"Agent: {events[0].agent_id} | Total Intercepted Calls: {len(events)}",
             "=" * 60,
             "",
         ]

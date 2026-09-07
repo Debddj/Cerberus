@@ -34,8 +34,16 @@ class AuditLogger:
     - hash: SHA-256(index:prev_hash:event_json)
     """
 
-    def __init__(self, log_path: str | None = None, key: str | None = None):
+    def __init__(
+        self,
+        log_path: str | None = None,
+        key: str | None = None,
+        max_bytes: int | None = None,
+        backup_count: int | None = None,
+    ):
         self.log_path = log_path or settings.log_path
+        self.max_bytes = max_bytes if max_bytes is not None else settings.log_max_bytes
+        self.backup_count = backup_count if backup_count is not None else settings.log_backup_count
         self._fernet: Fernet | None = None  # type: ignore[assignment]
         self._lock = threading.Lock()
         self._last_hash = GENESIS_HASH
@@ -53,7 +61,7 @@ class AuditLogger:
             return None
 
         if not self._raw_key:
-            key_path = os.path.splitext(self.log_path)[0] + ".key"
+            key_path = settings.log_encryption_key_path or (os.path.splitext(self.log_path)[0] + ".key")
             if os.path.exists(key_path):
                 with open(key_path, "r", encoding="utf-8") as f:
                     self._raw_key = f.read().strip()
@@ -98,8 +106,30 @@ class AuditLogger:
         payload = f"{index}:{prev_hash}:{raw_event_json}"
         return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
+    def _rotate_if_needed(self) -> None:
+        if self.max_bytes <= 0 or not os.path.exists(self.log_path):
+            return
+        try:
+            if os.path.getsize(self.log_path) < self.max_bytes:
+                return
+            for i in range(self.backup_count - 1, 0, -1):
+                s_from = f"{self.log_path}.{i}"
+                s_to = f"{self.log_path}.{i + 1}"
+                if os.path.exists(s_from):
+                    if os.path.exists(s_to):
+                        os.remove(s_to)
+                    os.rename(s_from, s_to)
+            dest = f"{self.log_path}.1"
+            if os.path.exists(dest):
+                os.remove(dest)
+            os.rename(self.log_path, dest)
+            logger.info("Rotated audit log %s -> %s", self.log_path, dest)
+        except Exception as e:
+            logger.warning("Audit log rotation failed: %s", e)
+
     def _sync_write(self, raw_event_json: str) -> None:
         with self._lock:
+            self._rotate_if_needed()
             index = self._entry_index
             prev_h = self._last_hash
             entry_hash = self.compute_entry_hash(index, prev_h, raw_event_json)

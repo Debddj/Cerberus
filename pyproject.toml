@@ -1,6 +1,6 @@
 [project]
 name = "cerberus-firewall"
-version = "0.1.0"
+version = "1.0.0"
 description = "A runtime behavioral firewall for MCP-based autonomous AI agents"
 readme = "README.md"
 requires-python = ">=3.12"
@@ -24,7 +24,6 @@ dependencies = [
     "jinja2>=3.1.4",
     "joblib>=1.4.0",
     "cryptography>=43.0.0",
-    "hypothesis>=6.167.1",
 ]
 
 [project.scripts]
@@ -32,6 +31,7 @@ cerberus = "cerberus.cli:main"
 
 [project.optional-dependencies]
 dev = [
+    "hypothesis>=6.167.1",
     "pytest>=8.3.0",
     "pytest-asyncio>=0.24.0",
     "pytest-cov>=5.0.0",

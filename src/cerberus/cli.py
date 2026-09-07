@@ -27,7 +27,7 @@ def main():
         "verify-log", help="Verify integrity of tamper-evident forensic audit log"
     )
     verify_p.add_argument(
-        "--log-path", default="audit.log", help="Path to audit log file (default: audit.log)"
+        "--log-path", default="cerberus_audit.jsonl", help="Path to audit log file (default: cerberus_audit.jsonl)"
     )
     verify_p.add_argument("--key", default=None, help="Decryption key if logs are encrypted")
 

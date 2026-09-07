@@ -18,6 +18,7 @@ class CerberusSettings(BaseSettings):
     # Multi-tenant Auth & Rate Limiting
     require_signed_identity: bool = False
     hmac_secret_key: str = ""
+    hmac_key_file_path: str = ""
     rate_limit_per_minute: int = 120
 
     # OPA Policy Engine
@@ -40,10 +41,13 @@ class CerberusSettings(BaseSettings):
 
     # Logging and Persistence
     log_path: str = "cerberus_audit.jsonl"
+    log_max_bytes: int = 10 * 1024 * 1024  # 10 MB per file
+    log_backup_count: int = 5
     pins_db_path: str = "cerberus_pins.db"
     baselines_dir: str = "baselines"
     encrypt_logs: bool = True
     log_encryption_key: str = ""
+    log_encryption_key_path: str = ""
 
     # Static scanner toggles
     trifecta_override: bool = False

@@ -85,7 +85,7 @@ class OPAClient:
         try:
             # Query the primary behavioral decision endpoint
             resp = await self.client.post(
-                f"{self.opa_url}/v1/data/cerberus/behavioral/decision", json=payload
+                f"{self.opa_url}/cerberus/behavioral/decision", json=payload
             )
             resp.raise_for_status()
             self._circuit_open = False
@@ -136,7 +136,7 @@ class OPAClient:
         highest = "allow"
 
         for pkg in self.POLICY_PACKAGES:
-            endpoint = f"{self.opa_url}/v1/data/{pkg}/decision"
+            endpoint = f"{self.opa_url}/{pkg}/decision"
             try:
                 resp = await self.client.post(endpoint, json=payload)
                 if resp.status_code == 200:
@@ -177,6 +177,21 @@ class OPAClient:
                 return EventDecision.FLAG, f"{reason_prefix}: Degraded flag for moderate-risk call"
             return EventDecision.ALLOW, f"{reason_prefix}: Degraded allow for low-risk call"
         return EventDecision.ALLOW, f"{reason_prefix}: Fail-Open mode"
+
+    async def put_policy(self, policy_id: str, rego_content: str) -> bool:
+        """Push Rego policy text to OPA /v1/policies/<policy_id> endpoint."""
+        base_url = self.opa_url.split("/v1/data")[0] if "/v1/data" in self.opa_url else self.opa_url
+        endpoint = f"{base_url}/v1/policies/{policy_id}"
+        try:
+            resp = await self.client.put(
+                endpoint,
+                content=rego_content,
+                headers={"Content-Type": "text/plain"},
+            )
+            return resp.status_code in (200, 201)
+        except Exception as e:
+            logger.warning(f"Failed to push policy '{policy_id}' to OPA: {e}")
+            return False
 
     async def close(self):
         """Gracefully close the underlying httpx client."""

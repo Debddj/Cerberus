@@ -170,3 +170,43 @@ async def test_server_admin_policy_lifecycle():
         res_appr = await client.post(f"/admin/policies/{pol_id}/approve")
         assert res_appr.status_code == 200
         assert res_appr.json()["status"] == "approved"
+
+
+@pytest.mark.asyncio
+async def test_react_frontend_and_dashboard_api():
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        # Test React UI serving at /ui and /dashboard
+        res_ui = await client.get("/ui")
+        assert res_ui.status_code == 200
+        assert "<!doctype html>" in res_ui.text.lower() or "<html" in res_ui.text.lower()
+
+        res_dash = await client.get("/dashboard")
+        assert res_dash.status_code == 200
+
+        # Test Dashboard Events API
+        res_events = await client.get("/api/events?limit=10")
+        assert res_events.status_code == 200
+        assert isinstance(res_events.json(), list)
+
+        # Test Policies API
+        res_pol = await client.get("/api/policies")
+        assert res_pol.status_code == 200
+        data_pol = res_pol.json()
+        assert "active" in data_pol
+        assert "pending" in data_pol
+
+        # Test Baselines API
+        res_bs = await client.get("/api/baselines")
+        assert res_bs.status_code == 200
+        assert isinstance(res_bs.json(), list)
+
+        # Test Audit Logs API & Verification
+        res_audit = await client.get("/api/audit/logs?limit=5")
+        assert res_audit.status_code == 200
+        assert isinstance(res_audit.json(), list)
+
+        res_verify = await client.post("/api/audit/verify")
+        assert res_verify.status_code == 200
+        data_verify = res_verify.json()
+        assert "is_valid" in data_verify
