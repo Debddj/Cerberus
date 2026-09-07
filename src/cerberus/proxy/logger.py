@@ -61,7 +61,9 @@ class AuditLogger:
             return None
 
         if not self._raw_key:
-            key_path = settings.log_encryption_key_path or (os.path.splitext(self.log_path)[0] + ".key")
+            key_path = settings.log_encryption_key_path or (
+                os.path.splitext(self.log_path)[0] + ".key"
+            )
             if os.path.exists(key_path):
                 with open(key_path, "r", encoding="utf-8") as f:
                     self._raw_key = f.read().strip()

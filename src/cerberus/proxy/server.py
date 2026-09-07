@@ -29,7 +29,12 @@ from cerberus.policy.synthesizer import PolicySynthesizer
 from cerberus.proxy.auth import HMACAuthenticator, TenantRateLimiter
 from cerberus.proxy.forwarder import UpstreamMCPForwarder
 from cerberus.proxy.logger import AuditLogger
-from cerberus.proxy.metrics import ACTIVE_QUARANTINES, REQUEST_COUNT, REQUEST_LATENCY, get_metrics_payload
+from cerberus.proxy.metrics import (
+    ACTIVE_QUARANTINES,
+    REQUEST_COUNT,
+    REQUEST_LATENCY,
+    get_metrics_payload,
+)
 from cerberus.proxy.models import EventDecision, ToolCallEvent
 from cerberus.proxy.redactor import SecretRedactor
 from cerberus.scanner.schema_pinner import SchemaPinner
@@ -40,6 +45,16 @@ from cerberus.storage.backend import get_storage_backend
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("cerberus.proxy")
+
+
+def _read_file_sync(path: str) -> str:
+    with open(path, "r", encoding="utf-8") as f:
+        return f.read()
+
+
+def _read_file_lines_sync(path: str) -> list[str]:
+    with open(path, "r", encoding="utf-8") as f:
+        return [line.strip() for line in f if line.strip()]
 
 
 class CerberusProxyEngine:
@@ -95,8 +110,8 @@ class CerberusProxyEngine:
         for q in list(self.event_subscribers):
             try:
                 q.put_nowait(event_dict)
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug(f"Failed to queue event for subscriber: {e}")
 
     async def initialize(self):
         await self.schema_pinner.init_db()
@@ -107,7 +122,9 @@ class CerberusProxyEngine:
         if explicit_dest:
             return explicit_dest
         for k, val in params.items():
-            if k in ("destination_domain", "domain", "host", "dest", "target") and isinstance(val, str):
+            if k in ("destination_domain", "domain", "host", "dest", "target") and isinstance(
+                val, str
+            ):
                 return val
             if isinstance(val, str) and val.startswith(("http://", "https://")):
                 try:
@@ -138,8 +155,8 @@ class CerberusProxyEngine:
                     self.active_unverified_agents.pop(aid, None)
             except asyncio.CancelledError:
                 break
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug(f"Error in unverified agents cleanup: {e}")
 
     async def run_online_refit(self, target_agent_id: str | None = None):
         """Runs online refit and creates versioned snapshots."""
@@ -220,7 +237,11 @@ class CerberusProxyEngine:
         prev_tools = self.window_mgr.get_recent_tools(session_id)
         # BUG-M6 fix: Use true monotonic counter instead of windowed length
         self.session_call_counters[session_id] += 1
-        seq_pos = sequence_position if sequence_position is not None else self.session_call_counters[session_id]
+        seq_pos = (
+            sequence_position
+            if sequence_position is not None
+            else self.session_call_counters[session_id]
+        )
         all_session_tools = prev_tools + [tool_name]
 
         event = ToolCallEvent(
@@ -494,6 +515,7 @@ app = FastAPI(
 
 # ── Data API endpoints for React dashboard ──────────────────────────────────
 
+
 @app.get("/api/events/recent")
 async def api_recent_events(limit: int = 50):
     """Return recent events across all sessions for the dashboard."""
@@ -515,15 +537,19 @@ async def api_agents():
     for agent_id in agents:
         history = await engine.storage.get_agent_history(agent_id, limit=100)
         baseline = engine.baseline_store.get_baseline(agent_id)
-        result.append({
-            "agent_id": agent_id,
-            "total_events": len(history),
-            "is_warm": baseline.is_warm,
-            "active_snapshot": baseline.active_snapshot_id,
-            "snapshots_count": len(baseline.snapshots),
-            "known_tools": sorted(list(baseline.known_tools)) if baseline.known_tools else [],
-            "trust_level": "unverified" if agent_id in engine.active_unverified_agents else "verified",
-        })
+        result.append(
+            {
+                "agent_id": agent_id,
+                "total_events": len(history),
+                "is_warm": baseline.is_warm,
+                "active_snapshot": baseline.active_snapshot_id,
+                "snapshots_count": len(baseline.snapshots),
+                "known_tools": sorted(baseline.known_tools) if baseline.known_tools else [],
+                "trust_level": "unverified"
+                if agent_id in engine.active_unverified_agents
+                else "verified",
+            }
+        )
     return result
 
 
@@ -531,15 +557,18 @@ async def api_agents():
 async def api_agent_timeline(agent_id: str, limit: int = 100):
     """Return risk timeline data for a specific agent."""
     history = await engine.storage.get_agent_history(agent_id, limit=limit)
-    return [{
-        "timestamp": e.get("timestamp"),
-        "tool_name": e.get("tool_name"),
-        "risk_score": e.get("risk_score", 0.0),
-        "decision": e.get("decision"),
-        "risk_factors": e.get("risk_factors", []),
-        "session_id": e.get("session_id"),
-        "trust_level": e.get("trust_level", "unverified"),
-    } for e in history]
+    return [
+        {
+            "timestamp": e.get("timestamp"),
+            "tool_name": e.get("tool_name"),
+            "risk_score": e.get("risk_score", 0.0),
+            "decision": e.get("decision"),
+            "risk_factors": e.get("risk_factors", []),
+            "session_id": e.get("session_id"),
+            "trust_level": e.get("trust_level", "unverified"),
+        }
+        for e in history
+    ]
 
 
 @app.get("/api/agents/{agent_id}/baseline")
@@ -560,8 +589,10 @@ async def api_agent_baseline(agent_id: str):
             }
             for s in baseline.snapshots
         ],
-        "known_tools": sorted(list(baseline.known_tools)) if baseline.known_tools else [],
-        "known_destinations": sorted(list(baseline.known_destinations)) if baseline.known_destinations else [],
+        "known_tools": sorted(baseline.known_tools) if baseline.known_tools else [],
+        "known_destinations": sorted(baseline.known_destinations)
+        if baseline.known_destinations
+        else [],
     }
 
 
@@ -574,14 +605,16 @@ async def api_sessions():
         history = await engine.storage.get_session_history(sid, limit=5)
         if history:
             latest = history[-1]
-            result.append({
-                "session_id": sid,
-                "agent_id": latest.get("agent_id", "unknown"),
-                "total_events": len(history),
-                "latest_risk_score": latest.get("risk_score", 0.0),
-                "latest_decision": latest.get("decision"),
-                "trust_level": latest.get("trust_level", "unverified"),
-            })
+            result.append(
+                {
+                    "session_id": sid,
+                    "agent_id": latest.get("agent_id", "unknown"),
+                    "total_events": len(history),
+                    "latest_risk_score": latest.get("risk_score", 0.0),
+                    "latest_decision": latest.get("decision"),
+                    "trust_level": latest.get("trust_level", "unverified"),
+                }
+            )
     return result
 
 
@@ -629,6 +662,7 @@ async def api_get_events(limit: int = 50):
 @app.get("/api/events/stream")
 async def api_event_stream(request: Request):
     """Server-Sent Events stream for live real-time dashboard updates."""
+
     async def sse_generator():
         q: asyncio.Queue = asyncio.Queue()
         engine.event_subscribers.add(q)
@@ -639,7 +673,7 @@ async def api_event_stream(request: Request):
                 try:
                     event_data = await asyncio.wait_for(q.get(), timeout=15.0)
                     yield f"data: {json.dumps(event_data)}\n\n"
-                except asyncio.TimeoutError:
+                except TimeoutError:
                     yield ": ping\n\n"
         finally:
             engine.event_subscribers.discard(q)
@@ -650,20 +684,18 @@ async def api_event_stream(request: Request):
 @app.get("/api/audit/logs")
 async def api_audit_logs(limit: int = 100):
     """Retrieve raw audit logs with envelope data for ledger exploration."""
-    import os
     if not os.path.exists(settings.log_path):
         return []
     records = []
     try:
-        with open(settings.log_path, "r", encoding="utf-8") as f:
-            lines = [line.strip() for line in f if line.strip()]
+        lines = await asyncio.to_thread(_read_file_lines_sync, settings.log_path)
         for line in reversed(lines[-limit:]):
             try:
                 decrypted = engine.audit_logger.decrypt_log_line(line)
                 rec = json.loads(decrypted)
                 records.append(rec)
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug(f"Failed to decrypt/parse log line: {e}")
     except Exception as e:
         logger.warning(f"Failed to read audit log: {e}")
     return records
@@ -684,25 +716,26 @@ async def api_verify_audit_ledger():
 @app.get("/api/policies")
 async def api_list_all_policies():
     """List active and candidate policies."""
-    import os
     policies_dir = "policies"
     active_policies = []
     if os.path.exists(policies_dir):
         for root, _, files in os.walk(policies_dir):
             for f in files:
                 if f.endswith(".rego"):
-                    rel_path = os.path.relpath(os.path.join(root, f), policies_dir)
+                    file_path = os.path.join(root, f)
+                    rel_path = os.path.relpath(file_path, policies_dir)
                     try:
-                        with open(os.path.join(root, f), "r", encoding="utf-8") as pf:
-                            content = pf.read()
-                        active_policies.append({
-                            "name": f,
-                            "path": rel_path,
-                            "type": "active",
-                            "code": content,
-                        })
-                    except Exception:
-                        pass
+                        content = await asyncio.to_thread(_read_file_sync, file_path)
+                        active_policies.append(
+                            {
+                                "name": f,
+                                "path": rel_path,
+                                "type": "active",
+                                "code": content,
+                            }
+                        )
+                    except Exception as e:
+                        logger.debug(f"Failed to read policy file {f}: {e}")
 
     pending = engine.policy_synthesizer.list_pending_policies()
     return {
@@ -714,7 +747,6 @@ async def api_list_all_policies():
 @app.get("/api/baselines")
 async def api_list_baselines():
     """List baselines for all agents."""
-    import os
     base_dir = settings.baselines_dir
     agents = []
     if os.path.exists(base_dir):
@@ -722,26 +754,31 @@ async def api_list_baselines():
             agent_path = os.path.join(base_dir, name)
             if os.path.isdir(agent_path):
                 baseline = engine.baseline_store.get_baseline(name)
-                agents.append({
-                    "agent_id": name,
-                    "active_snapshot_id": baseline.active_snapshot_id,
-                    "snapshots_count": len(baseline.snapshots),
-                    "known_tools": sorted(list(baseline.known_tools)) if baseline.known_tools else [],
-                    "known_destinations": sorted(list(baseline.known_destinations)) if baseline.known_destinations else [],
-                    "snapshots": [
-                        {
-                            "snapshot_id": s.snapshot_id,
-                            "created_at": s.created_at.isoformat(),
-                            "calls_in_snapshot": s.calls_in_snapshot,
-                            "is_active": s.is_active,
-                        }
-                        for s in baseline.snapshots
-                    ],
-                })
+                agents.append(
+                    {
+                        "agent_id": name,
+                        "active_snapshot_id": baseline.active_snapshot_id,
+                        "snapshots_count": len(baseline.snapshots),
+                        "known_tools": sorted(baseline.known_tools) if baseline.known_tools else [],
+                        "known_destinations": sorted(baseline.known_destinations)
+                        if baseline.known_destinations
+                        else [],
+                        "snapshots": [
+                            {
+                                "snapshot_id": s.snapshot_id,
+                                "created_at": s.created_at.isoformat(),
+                                "calls_in_snapshot": s.calls_in_snapshot,
+                                "is_active": s.is_active,
+                            }
+                            for s in baseline.snapshots
+                        ],
+                    }
+                )
     return agents
 
 
 # ── Existing Operational Endpoints ──────────────────────────────────────────
+
 
 @app.get("/healthz")
 async def health_check():
@@ -805,15 +842,14 @@ async def approve_policy(policy_id: str):
         raise HTTPException(status_code=404, detail="Policy not found or failed to approve")
 
     # BUG-M2 fix: Push approved Rego policy to OPA engine
-    import os
     rego_path = os.path.join(engine.policy_synthesizer.output_dir, f"{policy_id}.rego")
     if os.path.exists(rego_path):
         try:
-            with open(rego_path, "r", encoding="utf-8") as f:
-                rego_code = f.read()
+            rego_code = await asyncio.to_thread(_read_file_sync, rego_path)
             opa_client = getattr(engine.enforcer, "opa_client", None)
             if not opa_client:
                 from cerberus.policy.opa_client import OPAClient
+
                 opa_client = OPAClient()
             await opa_client.put_policy(policy_id, rego_code)
             logger.info(f"Pushed approved policy {policy_id} to OPA")
@@ -939,7 +975,11 @@ async def mcp_proxy_gateway(
 
             REQUEST_LATENCY.observe(duration)
             REQUEST_COUNT.labels(tool_name="tools/list", decision="allow").inc()
-            return {"jsonrpc": "2.0", "id": req_id, "result": upstream_res.get("result", {"tools": []})}
+            return {
+                "jsonrpc": "2.0",
+                "id": req_id,
+                "result": upstream_res.get("result", {"tools": []}),
+            }
 
         # Default tools (no upstream)
         REQUEST_LATENCY.observe(duration)

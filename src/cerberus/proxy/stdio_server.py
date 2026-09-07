@@ -6,8 +6,8 @@ and intercepts tool discovery and tool executions using CerberusProxyEngine.
 
 from __future__ import annotations
 
-from contextlib import asynccontextmanager
 import logging
+from contextlib import asynccontextmanager
 from typing import Any
 
 from mcp import types
@@ -20,6 +20,7 @@ from cerberus.proxy.models import EventDecision
 from cerberus.proxy.server import CerberusProxyEngine
 
 logger = logging.getLogger("cerberus.mcp_stdio")
+
 
 class CerberusStdioProxy:
     """Bridges client <-> Cerberus <-> Upstream MCP Server over stdio."""
