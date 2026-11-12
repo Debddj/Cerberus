@@ -4,25 +4,33 @@ export default {
     "./index.html",
     "./src/**/*.{js,ts,jsx,tsx}",
   ],
-  darkMode: 'class',
   theme: {
     extend: {
       colors: {
-        soc: {
-          bg: '#090d16',
-          panel: '#0f172a',
-          surface: '#1e293b',
-          border: '#334155',
-          accent: '#38bdf8',
-          danger: '#ef4444',
-          warning: '#f59e0b',
-          success: '#10b981',
-          quarantine: '#8b5cf6'
+        cerberus: {
+          bg: '#F3F0FF',
+          'bg-secondary': '#EAE6FF',
+          card: '#FFFFFF',
+          primary: '#6654E8',
+          secondary: '#8C7BFA',
+          soft: '#DCD5FF',
+          text: '#171638',
+          muted: '#666581',
+          success: '#22B982',
+          warning: '#F4AD42',
+          danger: '#F06478',
+          border: '#E3DDF8',
         }
       },
       fontFamily: {
-        mono: ['JetBrains Mono', 'Menlo', 'monospace'],
-        sans: ['Inter', 'system-ui', 'sans-serif']
+        display: ['"Plus Jakarta Sans"', 'Inter', 'system-ui', 'sans-serif'],
+        sans: ['Inter', 'system-ui', '-apple-system', 'sans-serif'],
+        mono: ['"JetBrains Mono"', 'Menlo', 'monospace'],
+      },
+      boxShadow: {
+        card: '0 10px 30px -12px rgba(102, 84, 232, 0.14)',
+        'card-hover': '0 18px 36px -12px rgba(102, 84, 232, 0.22)',
+        pill: '0 8px 20px -6px rgba(102, 84, 232, 0.45)',
       }
     },
   },

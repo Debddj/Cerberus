@@ -2,44 +2,95 @@
 @tailwind components;
 @tailwind utilities;
 
+:root {
+  --cerberus-bg: #F3F0FF;
+  --cerberus-bg-secondary: #EAE6FF;
+  --cerberus-card: #FFFFFF;
+  --cerberus-primary: #6654E8;
+  --cerberus-secondary: #8C7BFA;
+  --cerberus-soft: #DCD5FF;
+  --cerberus-text: #171638;
+  --cerberus-muted: #666581;
+  --cerberus-success: #22B982;
+  --cerberus-warning: #F4AD42;
+  --cerberus-danger: #F06478;
+  --cerberus-border: #E3DDF8;
+}
+
 @layer base {
   body {
-    background-color: #090d16;
-    color: #f1f5f9;
+    background-color: #F3F0FF;
+    color: #171638;
     font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  }
+
+  h1, h2, h3, h4 {
+    font-family: 'Plus Jakarta Sans', 'Inter', system-ui, sans-serif;
+    letter-spacing: -0.015em;
   }
 }
 
-/* Custom Scrollbar */
+/* Pastel Lavender Scrollbar */
 ::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
+  width: 7px;
+  height: 7px;
 }
 ::-webkit-scrollbar-track {
-  background: #090d16;
+  background: #EAE6FF;
 }
 ::-webkit-scrollbar-thumb {
-  background: #334155;
-  border-radius: 3px;
+  background: #C5B9FA;
+  border-radius: 9999px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: #475569;
+  background: #8C7BFA;
 }
 
-.glass-panel {
-  background: rgba(15, 23, 42, 0.75);
-  backdrop-filter: blur(12px);
-  border: 1px solid rgba(51, 65, 85, 0.5);
+.cerberus-gradient-btn {
+  background: linear-gradient(135deg, #6654E8 0%, #8C7BFA 100%);
+  box-shadow: 0 8px 20px -6px rgba(102, 84, 232, 0.48);
+  transition: transform 150ms ease, box-shadow 150ms ease, filter 150ms ease;
 }
 
-.glow-cyan {
-  box-shadow: 0 0 15px -3px rgba(56, 189, 248, 0.25);
+.cerberus-gradient-btn:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: 0 12px 24px -6px rgba(102, 84, 232, 0.56);
+  filter: brightness(1.04);
 }
 
-.glow-danger {
-  box-shadow: 0 0 15px -3px rgba(239, 68, 68, 0.3);
+.cerberus-gradient-btn:active:not(:disabled) {
+  transform: translateY(0px);
 }
 
-.glow-purple {
-  box-shadow: 0 0 15px -3px rgba(139, 92, 246, 0.3);
+.cerberus-card {
+  background-color: #FFFFFF;
+  border: 1px solid #E3DDF8;
+  border-radius: 1rem;
+  box-shadow: 0 10px 30px -12px rgba(102, 84, 232, 0.14);
+}
+
+.cerberus-hero-surface {
+  background: radial-gradient(circle at 74% 38%, rgba(255, 248, 235, 0.85) 0%, rgba(234, 230, 255, 0.9) 42%, #DFD8FD 100%);
+}
+
+/* React Flow Pastel Lavender Overrides */
+.react-flow__controls {
+  box-shadow: 0 8px 20px -6px rgba(102, 84, 232, 0.18) !important;
+  border: 1px solid #E3DDF8 !important;
+  border-radius: 0.75rem !important;
+  overflow: hidden;
+}
+
+.react-flow__controls-button {
+  background-color: #FFFFFF !important;
+  border-bottom-color: #E3DDF8 !important;
+  color: #6654E8 !important;
+}
+
+.react-flow__controls-button:hover {
+  background-color: #F3F0FF !important;
+}
+
+.react-flow__attribution {
+  display: none !important;
 }

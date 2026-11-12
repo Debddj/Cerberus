@@ -1,103 +1,115 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import { Navbar } from './components/Navbar';
-import { EventStreamView } from './components/EventStreamView';
-import { AttackChainView } from './components/AttackChainView';
-import { PolicyManagerView } from './components/PolicyManagerView';
-import { BaselineView } from './components/BaselineView';
-import { AuditLedgerView } from './components/AuditLedgerView';
-import { TelemetryView } from './components/TelemetryView';
-import { ToolCallEvent, MetricsSummary, HealthStatus } from './types';
-import { fetchMetrics, fetchHealth, fetchEvents, subscribeToEventStream } from './api';
+import React, { Suspense, lazy } from 'react';
+import { BrowserRouter, Navigate, Route, Routes, useLocation } from 'react-router-dom';
+import { DashboardLayout } from './components/layout/DashboardLayout';
+import { PublicLayout } from './components/layout/PublicLayout';
+import { ErrorBoundary } from './components/ui/ErrorBoundary';
+import { LoadingScreen } from './components/ui/LoadingScreen';
+import { AuthProvider, useAuth } from './context/AuthContext';
+import { TelemetryProvider } from './context/TelemetryContext';
+import { ToastProvider } from './context/ToastContext';
+import { ArchitecturePage } from './pages/public/ArchitecturePage';
+import { DocsPage } from './pages/public/DocsPage';
+import { FeaturesPage } from './pages/public/FeaturesPage';
+import { LandingPage } from './pages/public/LandingPage';
+import { LoginPage } from './pages/public/LoginPage';
+import { ThreatLabPage } from './pages/public/ThreatLabPage';
+
+const OverviewPage = lazy(() =>
+  import('./pages/dashboard/OverviewPage').then((m) => ({ default: m.OverviewPage }))
+);
+const AgentsPage = lazy(() =>
+  import('./pages/dashboard/AgentsPage').then((m) => ({ default: m.AgentsPage }))
+);
+const MonitoringPage = lazy(() =>
+  import('./pages/dashboard/MonitoringPage').then((m) => ({ default: m.MonitoringPage }))
+);
+const BehaviorPage = lazy(() =>
+  import('./pages/dashboard/BehaviorPage').then((m) => ({ default: m.BehaviorPage }))
+);
+const PoliciesPage = lazy(() =>
+  import('./pages/dashboard/PoliciesPage').then((m) => ({ default: m.PoliciesPage }))
+);
+const IncidentsPage = lazy(() =>
+  import('./pages/dashboard/IncidentsPage').then((m) => ({ default: m.IncidentsPage }))
+);
+const AuditPage = lazy(() =>
+  import('./pages/dashboard/AuditPage').then((m) => ({ default: m.AuditPage }))
+);
+const TestingPage = lazy(() =>
+  import('./pages/dashboard/TestingPage').then((m) => ({ default: m.TestingPage }))
+);
+const AnalyticsPage = lazy(() =>
+  import('./pages/dashboard/AnalyticsPage').then((m) => ({ default: m.AnalyticsPage }))
+);
+const SettingsPage = lazy(() =>
+  import('./pages/dashboard/SettingsPage').then((m) => ({ default: m.SettingsPage }))
+);
+
+const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const { isAuthenticated, isChecking } = useAuth();
+  const location = useLocation();
+
+  if (isChecking) {
+    return <LoadingScreen label="Verifying SOC session..." />;
+  }
+
+  if (!isAuthenticated) {
+    return <Navigate to="/login" state={{ from: location }} replace />;
+  }
+
+  return <>{children}</>;
+};
 
 export const App: React.FC = () => {
-  const [activeTab, setActiveTab] = useState<string>('events');
-  const [metrics, setMetrics] = useState<MetricsSummary | null>(null);
-  const [health, setHealth] = useState<HealthStatus | null>(null);
-  const [events, setEvents] = useState<ToolCallEvent[]>([]);
-  const [isStreaming, setIsStreaming] = useState<boolean>(false);
-  const [loading, setLoading] = useState<boolean>(false);
-
-  const loadInitialData = useCallback(async () => {
-    setLoading(true);
-    try {
-      const [m, h, evs] = await Promise.all([
-        fetchMetrics().catch(() => null),
-        fetchHealth().catch(() => null),
-        fetchEvents(100).catch(() => []),
-      ]);
-      if (m) setMetrics(m);
-      if (h) setHealth(h);
-      if (evs) setEvents(evs);
-    } catch (err) {
-      console.error('Error loading Cerberus SOC telemetry:', err);
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    loadInitialData();
-
-    // Subscribe to live SSE events
-    const unsubscribe = subscribeToEventStream((newEvent) => {
-      setIsStreaming(true);
-      setEvents((prev) => {
-        // Deduplicate
-        if (prev.some((e) => e.event_id === newEvent.event_id)) {
-          return prev;
-        }
-        return [newEvent, ...prev].slice(0, 200);
-      });
-    });
-
-    // Refresh telemetry every 10 seconds
-    const interval = setInterval(() => {
-      fetchMetrics().then(setMetrics).catch(() => {});
-      fetchHealth().then(setHealth).catch(() => {});
-    }, 10000);
-
-    return () => {
-      unsubscribe();
-      clearInterval(interval);
-    };
-  }, [loadInitialData]);
-
   return (
-    <div className="min-h-screen bg-soc-bg text-slate-100 flex flex-col selection:bg-cyan-500/30 selection:text-cyan-200">
-      <Navbar
-        metrics={metrics}
-        health={health}
-        activeTab={activeTab}
-        setActiveTab={setActiveTab}
-        isStreaming={isStreaming}
-        onRefresh={loadInitialData}
-        loading={loading}
-      />
+    <ErrorBoundary>
+      <BrowserRouter>
+        <ToastProvider>
+          <AuthProvider>
+            <TelemetryProvider>
+              <Suspense fallback={<LoadingScreen />}>
+                <Routes>
+                  {/* Public Website Routes */}
+                  <Route element={<PublicLayout />}>
+                    <Route path="/" element={<LandingPage />} />
+                    <Route path="/features" element={<FeaturesPage />} />
+                    <Route path="/architecture" element={<ArchitecturePage />} />
+                    <Route path="/threat-lab" element={<ThreatLabPage />} />
+                    <Route path="/docs" element={<DocsPage />} />
+                    <Route path="/login" element={<LoginPage />} />
+                  </Route>
 
-      <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6">
-        {activeTab === 'events' && (
-          <EventStreamView events={events} isStreaming={isStreaming} />
-        )}
-        {activeTab === 'timeline' && (
-          <AttackChainView events={events} />
-        )}
-        {activeTab === 'policies' && (
-          <PolicyManagerView />
-        )}
-        {activeTab === 'baselines' && (
-          <BaselineView />
-        )}
-        {activeTab === 'audit' && (
-          <AuditLedgerView />
-        )}
-        {activeTab === 'telemetry' && (
-          <TelemetryView metrics={metrics} health={health} events={events} />
-        )}
-      </main>
+                  {/* Protected SOC Dashboard Routes */}
+                  <Route
+                    path="/dashboard"
+                    element={
+                      <ProtectedRoute>
+                        <DashboardLayout />
+                      </ProtectedRoute>
+                    }
+                  >
+                    <Route index element={<OverviewPage />} />
+                    <Route path="agents" element={<AgentsPage />} />
+                    <Route path="monitoring" element={<MonitoringPage />} />
+                    <Route path="behavior" element={<BehaviorPage />} />
+                    <Route path="policies" element={<PoliciesPage />} />
+                    <Route path="incidents" element={<IncidentsPage />} />
+                    <Route path="audit" element={<AuditPage />} />
+                    <Route path="testing" element={<TestingPage />} />
+                    <Route path="analytics" element={<AnalyticsPage />} />
+                    <Route path="settings" element={<SettingsPage />} />
+                  </Route>
 
-      <footer className="border-t border-soc-border py-4 text-center text-xs font-mono text-slate-500">
-        Cerberus MCP Behavioral Firewall • Zero-Trust Runtime Protection for Autonomous Agents
-      </footer>
-    </div>
+                  {/* Compatibility redirect from legacy /ui mount */}
+                  <Route path="/ui" element={<Navigate to="/dashboard" replace />} />
+                  <Route path="/ui/*" element={<Navigate to="/dashboard" replace />} />
+                  <Route path="*" element={<Navigate to="/" replace />} />
+                </Routes>
+              </Suspense>
+            </TelemetryProvider>
+          </AuthProvider>
+        </ToastProvider>
+      </BrowserRouter>
+    </ErrorBoundary>
   );
 };

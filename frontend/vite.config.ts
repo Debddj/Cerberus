@@ -1,10 +1,21 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 
-// https://vite.dev/config/
 export default defineConfig({
   plugins: [react()],
-  base: './',
+  base: '/',
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          'vendor-react': ['react', 'react-dom', 'react-router-dom'],
+          'vendor-charts': ['recharts'],
+          'vendor-flow': ['@xyflow/react'],
+          'vendor-motion': ['framer-motion'],
+        },
+      },
+    },
+  },
   server: {
     port: 5173,
     proxy: {
@@ -14,6 +25,7 @@ export default defineConfig({
       '/policy': 'http://localhost:8000',
       '/baselines': 'http://localhost:8000',
       '/admin': 'http://localhost:8000',
-    }
-  }
+      '/mcp': 'http://localhost:8000',
+    },
+  },
 })

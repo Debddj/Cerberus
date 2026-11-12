@@ -11,6 +11,7 @@ from urllib.parse import urlparse
 
 import numpy as np
 from fastapi import Body, FastAPI, Header, HTTPException, Request, Response
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
@@ -37,6 +38,7 @@ from cerberus.proxy.metrics import (
 )
 from cerberus.proxy.models import EventDecision, ToolCallEvent
 from cerberus.proxy.redactor import SecretRedactor
+from cerberus.proxy.soc_routes import create_soc_router
 from cerberus.scanner.schema_pinner import SchemaPinner
 from cerberus.scanner.scope_analyzer import ScopeAnalyzer
 from cerberus.scanner.shadow_detector import ShadowDetector
@@ -104,6 +106,17 @@ class CerberusProxyEngine:
         # BUG-H5 fix: Track active quarantined sessions
         self.quarantined_sessions: set[str] = set()
         self.event_subscribers: set[asyncio.Queue] = set()
+
+        # SOC Control Plane runtime state
+        self.started_at: float = time.time()
+        self.latencies_ms: deque[float] = deque(maxlen=1000)
+        self.event_breakdowns: dict[str, dict[str, Any]] = {}
+        self.registered_agents: dict[str, dict[str, Any]] = {}
+        self.suspended_agents: set[str] = set()
+        self.disabled_policies: set[str] = set()
+        self.policy_history: list[dict[str, Any]] = []
+        self.testing_history: list[dict[str, Any]] = []
+        self.last_audit_verified_at: float | None = None
 
     def broadcast_event(self, event_dict: dict[str, Any]) -> None:
         """Broadcast live event to all active SSE subscribers."""
@@ -211,7 +224,9 @@ class CerberusProxyEngine:
         trust_level: str = "unverified",
         sequence_position: int | None = None,
         request_id: Any = 1,
+        schema_drift_err: str | None = None,
     ) -> tuple[ToolCallEvent, dict[str, Any]]:
+        t_call_start = time.perf_counter()
         now = time.time()
         param_str = json.dumps(parameters, sort_keys=True)
         param_bytes = len(param_str.encode("utf-8"))
@@ -260,9 +275,6 @@ class CerberusProxyEngine:
             trust_level=trust_level,
         )
 
-        # Record event in storage backend
-        await self.storage.record_event(session_id, agent_id, event.model_dump(mode="json"))
-
         # BUG-C2 fix: Scope enforcement check
         scope_verdict = self.scope_analyzer.check_scope(agent_id, tool_name)
         if not scope_verdict.allowed:
@@ -279,7 +291,10 @@ class CerberusProxyEngine:
             )
 
         # BUG-C1 fix: Schema pinning verification on HTTP path
-        if upstream_url:
+        if schema_drift_err:
+            event.risk_score = 0.99
+            event.risk_factors.append(f"Schema Drift (Rug Pull): {schema_drift_err}")
+        elif upstream_url:
             # If tools were pinned during tools/list, verify consistency
             pass  # verify_or_pin is called on tools/list; here we trust the pin
 
@@ -333,6 +348,11 @@ class CerberusProxyEngine:
         # Tier 1: Fast Heuristic Rule Scorer + Markov (<1ms budget)
         r_score, r_factors = self.rule_scorer.score(rule_f)
         m_score, m_factors = self.markov_scorer.score(markov_f)
+        i_score = 0.0
+        i_factors: list[str] = []
+        t_score = 0.0
+        t_factors: list[str] = []
+        tier_exited = 1
         tier1_score = 0.5 * r_score + 0.5 * m_score
         tier1_factors = r_factors + m_factors
 
@@ -359,6 +379,7 @@ class CerberusProxyEngine:
                 ens_factors = tier1_factors
             else:
                 # Tier 2: Isolation Forest Scorer
+                tier_exited = 2
                 i_score, i_factors = self.isolation_scorer.score(if_f)
                 tier2_score = 0.30 * r_score + 0.30 * m_score + 0.40 * i_score
                 if i_score >= 0.80:
@@ -371,6 +392,7 @@ class CerberusProxyEngine:
                     ens_factors = tier2_factors
                 else:
                     # Tier 3: Ambiguous Band (0.35 <= score < 0.70) -> Sequence Transformer
+                    tier_exited = 3
                     t_score, t_factors = self.transformer_scorer.score(all_session_tools)
                     ens_score, ens_factors = self.ensemble_scorer.combine(
                         rule_score=r_score,
@@ -383,23 +405,55 @@ class CerberusProxyEngine:
                         transformer_factors=t_factors,
                     )
 
+        if agent_id in self.suspended_agents:
+            ens_score = 1.0
+            ens_factors.append("Agent Suspended: Access revoked by Cerberus SOC administrator")
+
         if event.risk_score is None or ens_score > event.risk_score:
             event.risk_score = ens_score
         event.risk_factors.extend(ens_factors)
         event.risk_factors = list(dict.fromkeys(event.risk_factors))
 
         # 5. Policy Enforcement
-        decision = await self.enforcer.enforce(event)
+        if agent_id in self.suspended_agents:
+            decision = EventDecision.BLOCK
+            event.decision_reason = "Blocked: Agent is administratively suspended"
+        else:
+            decision = await self.enforcer.enforce(event)
         event.decision = decision
+
+        elapsed_ms = round((time.perf_counter() - t_call_start) * 1000.0, 2)
+        self.latencies_ms.append(elapsed_ms)
+        self.event_breakdowns[event.event_id] = {
+            "event_id": event.event_id,
+            "agent_id": agent_id,
+            "session_id": session_id,
+            "tool_name": tool_name,
+            "rule_score": round(float(r_score), 3),
+            "markov_score": round(float(m_score), 3),
+            "isolation_score": round(float(i_score), 3),
+            "transformer_score": round(float(t_score), 3),
+            "composite_score": round(float(event.risk_score or 0.0), 3),
+            "tier_exited": tier_exited,
+            "decision": decision.value,
+            "rule_factors": r_factors,
+            "markov_factors": m_factors,
+            "isolation_factors": i_factors,
+            "transformer_factors": t_factors,
+            "duration_ms": elapsed_ms,
+            "timestamp": now,
+        }
 
         # BUG-H5 fix: Update quarantine gauge with active session tracking
         if decision == EventDecision.QUARANTINE:
             self.quarantined_sessions.add(session_id)
             ACTIVE_QUARANTINES.set(len(self.quarantined_sessions))
 
-        # 6. Audit Logging & State Update
+        # 6. Audit Logging & State Update (persist finalized event with risk score & decision)
+        event_dump = event.model_dump(mode="json")
+        await self.storage.record_event(session_id, agent_id, event_dump)
         await self.audit_logger.log_event(event)
-        self.broadcast_event(event.model_dump(mode="json"))
+        self.broadcast_event(event_dump)
 
         # Update baseline counts if safe (stability gating)
         if decision in (EventDecision.ALLOW, EventDecision.FLAG):
@@ -510,7 +564,19 @@ app = FastAPI(
     description="A runtime behavioral firewall for MCP-based AI agents",
     version="1.0.0",  # BUG-L2 fix: unified version
     lifespan=lifespan,
+    docs_url="/api/docs",
+    openapi_url="/api/openapi.json",
 )
+
+cors_origins = [o.strip() for o in settings.cors_origins.split(",") if o.strip()]
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=cors_origins,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+app.include_router(create_soc_router(engine))
 
 
 # ── Data API endpoints for React dashboard ──────────────────────────────────
@@ -531,20 +597,47 @@ async def api_recent_events(limit: int = 50):
 
 @app.get("/api/agents")
 async def api_agents():
-    """Return list of active agents with summary metrics."""
-    agents = await engine.storage.get_active_agents()
+    """Return list of active and registered agents with summary metrics."""
+    active_ids = await engine.storage.get_active_agents()
+    all_agent_ids = list(dict.fromkeys([*engine.registered_agents.keys(), *active_ids]))
     result = []
-    for agent_id in agents:
+    for agent_id in all_agent_ids:
         history = await engine.storage.get_agent_history(agent_id, limit=100)
         baseline = engine.baseline_store.get_baseline(agent_id)
+        reg = engine.registered_agents.get(agent_id, {})
+        latest = history[-1] if history else {}
+        latest_risk = float(latest.get("risk_score") or 0.0)
+        latest_dec = str(latest.get("decision") or "").lower()
+        observed_servers = sorted(
+            {e.get("tool_server") for e in history if e.get("tool_server")}
+            | set(reg.get("mcp_servers", []))
+        )
+        auth_tools = sorted(
+            engine.scope_analyzer.agent_scopes.get(agent_id, set(reg.get("authorized_tools", [])))
+        )
+        if agent_id in engine.suspended_agents:
+            status = "suspended"
+        elif latest_dec == "quarantine" or latest.get("session_id") in engine.quarantined_sessions:
+            status = "quarantined"
+        elif latest_dec in ("flag", "block") or latest_risk >= settings.risk_flag_threshold:
+            status = "flagged"
+        else:
+            status = "active"
+
         result.append(
             {
                 "agent_id": agent_id,
+                "agent_type": reg.get("agent_type", "Autonomous"),
+                "status": status,
                 "total_events": len(history),
                 "is_warm": baseline.is_warm,
                 "active_snapshot": baseline.active_snapshot_id,
                 "snapshots_count": len(baseline.snapshots),
                 "known_tools": sorted(baseline.known_tools) if baseline.known_tools else [],
+                "authorized_tools": auth_tools,
+                "mcp_servers": observed_servers,
+                "current_risk_score": round(latest_risk, 3),
+                "last_activity": latest.get("timestamp") or reg.get("created_at"),
                 "trust_level": "unverified"
                 if agent_id in engine.active_unverified_agents
                 else "verified",
@@ -627,12 +720,42 @@ async def api_session_events(session_id: str, limit: int = 100):
 @app.get("/api/metrics/summary")
 async def api_metrics_summary():
     """Aggregated dashboard metrics."""
-    agents = await engine.storage.get_active_agents()
+    active_ids = await engine.storage.get_active_agents()
+    all_agent_ids = set(active_ids) | set(engine.registered_agents.keys())
     sessions = await engine.storage.get_active_sessions()
+    counts = {"allow": 0, "flag": 0, "block": 0, "quarantine": 0}
+    total_calls = 0
+    for sid in sessions:
+        hist = await engine.storage.get_session_history(sid, limit=500)
+        total_calls += len(hist)
+        for ev in hist:
+            dec = str(ev.get("decision") or "allow").lower()
+            if dec in counts:
+                counts[dec] += 1
+
+    latency_samples = list(engine.latencies_ms)
+    latency_stats = None
+    if latency_samples:
+        arr = np.array(latency_samples, dtype=float)
+        latency_stats = {
+            "p50": round(float(np.percentile(arr, 50)), 2),
+            "p95": round(float(np.percentile(arr, 95)), 2),
+            "p99": round(float(np.percentile(arr, 99)), 2),
+            "avg": round(float(np.mean(arr)), 2),
+        }
+
     return {
-        "active_agents": len(agents),
+        "active_agents": len(all_agent_ids),
         "active_sessions": len(sessions),
         "unverified_agents": len(engine.active_unverified_agents),
+        "total_tool_calls": total_calls,
+        "allow_count": counts["allow"],
+        "flag_count": counts["flag"],
+        "block_count": counts["block"],
+        "quarantine_count": counts["quarantine"],
+        "quarantined_sessions": len(engine.quarantined_sessions),
+        "uptime_seconds": round(time.time() - engine.started_at, 1),
+        "latency_ms": latency_stats,
         "mode": settings.mode,
         "fail_closed": settings.fail_closed,
         "require_signed_identity": settings.require_signed_identity,
@@ -705,6 +828,7 @@ async def api_audit_logs(limit: int = 100):
 async def api_verify_audit_ledger():
     """Verify cryptographic SHA-256 hash chain across audit ledger."""
     valid, count, err = AuditLogger.verify_ledger(settings.log_path)
+    engine.last_audit_verified_at = time.time()
     return {
         "is_valid": valid,
         "total_entries": count,
@@ -731,6 +855,7 @@ async def api_list_all_policies():
                                 "name": f,
                                 "path": rel_path,
                                 "type": "active",
+                                "enabled": f not in engine.disabled_policies,
                                 "code": content,
                             }
                         )
@@ -1067,6 +1192,19 @@ if os.path.exists(_frontend_dist):
     if os.path.exists(assets_dir):
         app.mount("/assets", StaticFiles(directory=assets_dir), name="dashboard_assets")
 
+    @app.get("/cerberus-logo.svg")
+    async def serve_logo_svg():
+        logo_path = os.path.join(_frontend_dist, "cerberus-logo.svg")
+        if os.path.isfile(logo_path):
+            return FileResponse(logo_path, media_type="image/svg+xml")
+        raise HTTPException(status_code=404, detail="Logo not found")
+
+    @app.get("/")
+    @app.get("/features")
+    @app.get("/architecture")
+    @app.get("/threat-lab")
+    @app.get("/docs")
+    @app.get("/login")
     @app.get("/ui")
     @app.get("/ui/{full_path:path}")
     @app.get("/dashboard")
