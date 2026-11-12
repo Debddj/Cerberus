@@ -55,6 +55,11 @@ class CerberusSettings(BaseSettings):
     # Scope enforcement: "learn" (monitor + log, fail-open) or "strict" (fail-closed from call #1)
     scope_enforcement_mode: Literal["learn", "strict"] = "learn"
 
+    # SOC Dashboard Auth & CORS
+    soc_username: str = "admin"
+    soc_password: str = "cerberus-soc"
+    cors_origins: str = "http://localhost:5173,http://127.0.0.1:5173,http://localhost:8000"
+
     model_config = SettingsConfigDict(env_prefix="CERBERUS_", env_file=".env", extra="ignore")
 
 
