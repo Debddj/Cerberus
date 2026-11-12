@@ -154,4 +154,3 @@ async def test_soc_policy_create_toggle_and_cleanup():
         custom_dir = os.path.dirname(custom_path)
         if os.path.isdir(custom_dir) and not os.listdir(custom_dir):
             os.rmdir(custom_dir)
-

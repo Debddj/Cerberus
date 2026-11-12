@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import hmac
 import json
+import logging
 import os
 import re
 import time
@@ -12,7 +13,7 @@ from typing import TYPE_CHECKING, Any
 
 import httpx
 import numpy as np
-from fastapi import APIRouter, Body, Header, HTTPException, Response
+from fastapi import APIRouter, Header, HTTPException, Response
 from pydantic import BaseModel, Field
 
 from cerberus.config import settings
@@ -20,6 +21,8 @@ from cerberus.narrative.reconstructor import NarrativeReconstructor
 from cerberus.proxy.metrics import ACTIVE_QUARANTINES
 from cerberus.proxy.models import ToolCallEvent
 from cerberus.scanner.trifecta import LethalTrifectaDetector
+
+logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     from cerberus.proxy.server import CerberusProxyEngine
@@ -744,17 +747,25 @@ def create_soc_router(engine: CerberusProxyEngine) -> APIRouter:
             return Response(
                 content="[]",
                 media_type="application/json",
-                headers={"Content-Disposition": 'attachment; filename="cerberus_audit_export.json"'},
+                headers={
+                    "Content-Disposition": 'attachment; filename="cerberus_audit_export.json"'
+                },
             )
-        with open(settings.log_path, "r", encoding="utf-8") as f:
-            lines = [line.strip() for line in f if line.strip()]
-        records = []
-        for line in lines[-limit:]:
-            try:
-                decrypted = engine.audit_logger.decrypt_log_line(line)
-                records.append(json.loads(decrypted))
-            except Exception:
-                continue
+
+        def _read_and_decrypt() -> list[dict[str, Any]]:
+            with open(settings.log_path, "r", encoding="utf-8") as f:
+                raw_lines = [line.strip() for line in f if line.strip()]
+            out: list[dict[str, Any]] = []
+            for raw_line in raw_lines[-limit:]:
+                try:
+                    decrypted = engine.audit_logger.decrypt_log_line(raw_line)
+                    out.append(json.loads(decrypted))
+                except Exception as exc:
+                    logger.debug("Skipping unreadable audit line: %s", exc)
+                    continue
+            return out
+
+        records = await asyncio.to_thread(_read_and_decrypt)
         return Response(
             content=json.dumps(records, indent=2),
             media_type="application/json",
@@ -788,7 +799,7 @@ def create_soc_router(engine: CerberusProxyEngine) -> APIRouter:
             else:
                 pin_ok, pin_err = True, None
 
-            event, outcome = await engine.process_tool_call(
+            event, _outcome = await engine.process_tool_call(
                 session_id=session_id,
                 agent_id=agent_id,
                 tool_name=step["tool_name"],
