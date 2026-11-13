@@ -8,7 +8,8 @@ __pycache__/
 build/
 develop-eggs/
 /dist/
-!frontend/dist/
+frontend/dist/
+frontend/node_modules/
 downloads/
 eggs/
 .eggs/
@@ -75,6 +76,7 @@ desktop.ini
 *.swo
 
 *.jsonl
+*.jsonl.lock
 
 # Encryption keys
 *.key

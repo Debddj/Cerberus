@@ -51,3 +51,30 @@ async def test_opa_client_evaluate_mock_success():
     assert "OPA Decision: block" in reason
 
     await client.close()
+
+
+@pytest.mark.asyncio
+async def test_opa_client_evaluate_challenge_decision():
+    client = OPAClient(opa_url="http://mock-opa", timeout=0.1)
+
+    mock_resp = MagicMock()
+    mock_resp.status_code = 200
+    mock_resp.json.return_value = {"result": "challenge"}
+    mock_resp.raise_for_status = MagicMock()
+
+    client.client.post = AsyncMock(return_value=mock_resp)
+
+    event = ToolCallEvent(
+        session_id="s3",
+        agent_id="a3",
+        tool_name="admin_action",
+        tool_server="srv",
+        risk_score=0.6,
+    )
+
+    decision, reason = await client.evaluate(event)
+    assert decision == EventDecision.CHALLENGE
+    assert "OPA Decision: challenge" in reason
+    assert not client._circuit_open
+
+    await client.close()

@@ -1,16 +1,20 @@
 import asyncio
+import hashlib
+import hmac
 import json
 import logging
+import math
 import os
 import time
 import uuid
 from collections import defaultdict, deque
 from contextlib import asynccontextmanager
+from datetime import datetime
 from typing import Any
 from urllib.parse import urlparse
 
 import numpy as np
-from fastapi import Body, FastAPI, Header, HTTPException, Request, Response
+from fastapi import Body, Depends, FastAPI, Header, HTTPException, Request, Response
 from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
@@ -60,8 +64,13 @@ def _read_file_lines_sync(path: str) -> list[str]:
 class CerberusProxyEngine:
     """Coordinates runtime interception, static validation, ML scoring, and enforcement."""
 
-    def __init__(self):
-        self.audit_logger = AuditLogger()
+    def __init__(
+        self,
+        audit_logger: AuditLogger | None = None,
+        baseline_store: BaselineStore | None = None,
+        schema_pinner: SchemaPinner | None = None,
+    ):
+        self.audit_logger = audit_logger or AuditLogger()
         self.window_mgr = SessionWindowManager(window_size=5)
         self.running_scaler = RunningScaler()
         self.markov_scorer = MarkovScorer()
@@ -69,10 +78,10 @@ class CerberusProxyEngine:
         self.transformer_scorer = SequenceTransformerScorer()
         self.rule_scorer = RuleBasedScorer()
         self.ensemble_scorer = EnsembleScorer()
-        self.schema_pinner = SchemaPinner(db_path=settings.pins_db_path)
+        self.schema_pinner = schema_pinner or SchemaPinner(db_path=settings.pins_db_path)
         self.enforcer = EnforcementPipeline()
         self.forwarder = UpstreamMCPForwarder()
-        self.baseline_store = BaselineStore(base_dir=settings.baselines_dir)
+        self.baseline_store = baseline_store or BaselineStore(base_dir=settings.baselines_dir)
         self.policy_synthesizer = PolicySynthesizer()
 
         # BUG-C2/C3 fix: Wire ScopeAnalyzer and ShadowDetector into runtime
@@ -101,8 +110,16 @@ class CerberusProxyEngine:
         self.last_call_times: dict[str, float] = {}
         # BUG-M6 fix: True monotonic sequence counters per session
         self.session_call_counters: dict[str, int] = defaultdict(int)
+        # Session-splitting evasion defense: per-agent session history & aggregate trajectory
+        self.agent_session_history: dict[str, deque[tuple[float, str]]] = defaultdict(
+            lambda: deque(maxlen=100)
+        )
+        self.agent_recent_tools: dict[str, deque[str]] = defaultdict(lambda: deque(maxlen=10))
+        self.agent_call_counters: dict[str, int] = defaultdict(int)
+        self.agent_start_times: dict[str, float] = {}
         # BUG-H5 fix: Track active quarantined sessions
         self.quarantined_sessions: set[str] = set()
+        self.contaminated_sessions: set[str] = set()
         self.event_subscribers: set[asyncio.Queue] = set()
 
     def broadcast_event(self, event_dict: dict[str, Any]) -> None:
@@ -181,10 +198,14 @@ class CerberusProxyEngine:
             if agent_buf and len(agent_buf) >= 20:
                 self.isolation_scorer.fit(np.array(agent_buf[-settings.if_refit_interval :]))
 
-            # Refit Sequence Transformer on observed session sequences
-            sequences = list(self.transformer_training_sequences.values())
-            if sequences:
-                self.transformer_scorer.fit(sequences)
+            # Refit Sequence Transformer on observed clean session sequences (non-circular contamination rule)
+            clean_sequences = [
+                seq
+                for sid, seq in self.transformer_training_sequences.items()
+                if sid not in self.contaminated_sessions
+            ]
+            if clean_sequences:
+                self.transformer_scorer.fit(clean_sequences)
 
             # Persist versioned snapshot
             snapshot = self.baseline_store.create_snapshot(
@@ -213,25 +234,24 @@ class CerberusProxyEngine:
         request_id: Any = 1,
     ) -> tuple[ToolCallEvent, dict[str, Any]]:
         now = time.time()
+        # 1. Feature Extraction on RAW parameters (Invariant: preserve anomaly detection fidelity)
         param_str = json.dumps(parameters, sort_keys=True)
         param_bytes = len(param_str.encode("utf-8"))
+        param_entropy = FeatureExtractor.extract_entropy(parameters)
 
         dest_domain = self._extract_destination(parameters, destination_domain)
 
-        # 1. Secret Redaction
+        # 2. Secret Redaction (for safe logging and persistence)
         redacted_params, redacted_fields = SecretRedactor.redact_dict(parameters)
-
-        # BUG-H6 fix: Compute parameter entropy and size upfront
-        param_entropy = FeatureExtractor.extract_entropy(parameters)
 
         # Session timing
         if session_id not in self.session_start_times:
             self.session_start_times[session_id] = now
-        session_duration_ms = (now - self.session_start_times[session_id]) * 1000.0
+        session_duration_ms = max(0.0, (now - self.session_start_times[session_id]) * 1000.0)
 
         time_since_prev_ms = None
         if session_id in self.last_call_times:
-            time_since_prev_ms = (now - self.last_call_times[session_id]) * 1000.0
+            time_since_prev_ms = max(0.0, (now - self.last_call_times[session_id]) * 1000.0)
         self.last_call_times[session_id] = now
 
         prev_tools = self.window_mgr.get_recent_tools(session_id)
@@ -242,7 +262,32 @@ class CerberusProxyEngine:
             if sequence_position is not None
             else self.session_call_counters[session_id]
         )
-        all_session_tools = prev_tools + [tool_name]
+
+        # Session-splitting evasion defense: per-agent session tracking and aggregate trajectory
+        self.agent_session_history[agent_id].append((now, session_id))
+        self.agent_call_counters[agent_id] += 1
+        if agent_id not in self.agent_start_times:
+            self.agent_start_times[agent_id] = now
+
+        # Detect rapid session rotation within last 60 seconds
+        cutoff_60s = now - 60.0
+        recent_agent_sessions = {
+            sid for ts, sid in self.agent_session_history[agent_id] if ts >= cutoff_60s
+        }
+        is_splitting_attack = len(recent_agent_sessions) >= 5
+
+        # Aggregate trajectory fallback: preserve Markov/Transformer context across split sessions
+        agent_prior_tools = list(self.agent_recent_tools[agent_id])
+        effective_prev_tools = prev_tools
+        if (not effective_prev_tools or is_splitting_attack) and agent_prior_tools:
+            effective_prev_tools = agent_prior_tools[-5:]
+
+        effective_seq_pos = (
+            self.agent_call_counters[agent_id]
+            if (is_splitting_attack or len(recent_agent_sessions) > 1)
+            else seq_pos
+        )
+        all_session_tools = effective_prev_tools + [tool_name]
 
         event = ToolCallEvent(
             session_id=session_id,
@@ -250,24 +295,30 @@ class CerberusProxyEngine:
             tool_name=tool_name,
             tool_server=tool_server,
             parameters=redacted_params,
-            parameter_size_bytes=param_bytes,  # BUG-H6 fix
-            parameter_entropy=param_entropy,  # BUG-H6 fix
+            parameter_size_bytes=param_bytes,  # Pre-computed on raw parameters
+            parameter_entropy=param_entropy,  # Pre-computed on raw parameters
             destination_domain=dest_domain,
             time_since_previous_ms=time_since_prev_ms,
             session_duration_ms=session_duration_ms,
-            sequence_position=seq_pos,
+            sequence_position=effective_seq_pos,
             redacted_fields=redacted_fields,
             trust_level=trust_level,
         )
 
-        # Record event in storage backend
-        await self.storage.record_event(session_id, agent_id, event.model_dump(mode="json"))
+        # Session splitting evasion flag
+        if is_splitting_attack:
+            event.risk_score = max(event.risk_score or 0.0, 0.70)
+            event.risk_factors.append(
+                f"Session-Splitting Evasion: {len(recent_agent_sessions)} distinct sessions rotated in 60s"
+            )
+            self.contaminated_sessions.add(session_id)
 
         # BUG-C2 fix: Scope enforcement check
         scope_verdict = self.scope_analyzer.check_scope(agent_id, tool_name)
         if not scope_verdict.allowed:
             event.risk_score = 0.92
             event.risk_factors.append(f"Scope Violation: {scope_verdict.reason}")
+            self.contaminated_sessions.add(session_id)
 
         # BUG-C3 fix: Shadow detection check
         is_shadow = self.shadow_detector.check_shadowing(tool_name, tool_server)
@@ -277,6 +328,7 @@ class CerberusProxyEngine:
                 f"Tool Shadowing Detected: '{tool_name}' served by '{tool_server}' "
                 f"but trusted source is '{self.shadow_detector.known_registry.get(tool_name)}'"
             )
+            self.contaminated_sessions.add(session_id)
 
         # BUG-C1 fix: Schema pinning verification on HTTP path
         if upstream_url:
@@ -290,6 +342,7 @@ class CerberusProxyEngine:
             event.risk_factors.append(
                 "Lethal Trifecta: Session combines private data access, untrusted content exposure, and external egress"
             )
+            self.contaminated_sessions.add(session_id)
 
         # 3. Behavioral Features & Scaling
         agent_tools = self.tool_counts.setdefault(agent_id, {})
@@ -297,23 +350,12 @@ class CerberusProxyEngine:
         tool_count = agent_tools.get(tool_name, 0)
         dest_count = agent_dests.get(dest_domain, 0) if dest_domain else 0
 
-        # Running stats for z-score (local + distributed storage backend, BUG-H3 fix)
-        self.running_scaler.update("param_size", float(param_bytes))
-        self.running_scaler.update("entropy", event.parameter_entropy)
-        if time_since_prev_ms is not None:
-            self.running_scaler.update("time_diff", float(time_since_prev_ms))
-        self.running_scaler.update("duration", float(session_duration_ms))
-        self.running_scaler.update("seq_pos", float(seq_pos))
-
-        await self.storage.update_running_stats(
-            agent_id,
-            [
-                float(param_bytes),
-                float(event.parameter_entropy),
-                float(time_since_prev_ms or 0.0),
-                float(session_duration_ms),
-                float(seq_pos),
-            ],
+        # Bounded & log-transformed duration and sequence position
+        duration_scaled = math.log10(
+            min(max(0.0, float(session_duration_ms or 0.0)) / 1000.0, 86400.0) + 1.0
+        )
+        seq_pos_scaled = math.log2(
+            min(max(0, int(seq_pos if seq_pos is not None else 0)), 1000) + 1
         )
 
         z_stats = {
@@ -323,7 +365,7 @@ class CerberusProxyEngine:
 
         markov_f, if_f, rule_f = FeatureExtractor.extract_all(
             event=event,
-            prev_tools=prev_tools,
+            prev_tools=effective_prev_tools,
             tool_seen_count=tool_count,
             dest_seen_count=dest_count,
             z_stats=z_stats,
@@ -341,7 +383,8 @@ class CerberusProxyEngine:
             ens_score = max(r_score, tier1_score)
             ens_factors = tier1_factors
         else:
-            # Cheap Escalation Trigger: high z-score or moderate tier 1 score
+            # Cheap Escalation Trigger: Tier 1 cheap escalation circuit specifically
+            # inspects abs(z) >= 3.0 to trigger Tier 2 isolation evaluation
             cheap_escalate = (tier1_score >= 0.20) or any(
                 abs(getattr(if_f, attr, 0.0)) >= 3.0
                 for attr in [
@@ -383,8 +426,9 @@ class CerberusProxyEngine:
                         transformer_factors=t_factors,
                     )
 
-        if event.risk_score is None or ens_score > event.risk_score:
-            event.risk_score = ens_score
+        final_score = max(ens_score, r_score if r_score >= 0.40 else 0.0)
+        if event.risk_score is None or final_score > event.risk_score:
+            event.risk_score = final_score
         event.risk_factors.extend(ens_factors)
         event.risk_factors = list(dict.fromkeys(event.risk_factors))
 
@@ -392,53 +436,81 @@ class CerberusProxyEngine:
         decision = await self.enforcer.enforce(event)
         event.decision = decision
 
+        # Non-circular contamination rule: quarantine any session that produces a non-ALLOW
+        # decision or whose risk score meets/exceeds the flag threshold
+        if decision != EventDecision.ALLOW or (
+            event.risk_score is not None and event.risk_score >= settings.risk_flag_threshold
+        ):
+            self.contaminated_sessions.add(session_id)
+            self.transformer_training_sequences.pop(session_id, None)
+
         # BUG-H5 fix: Update quarantine gauge with active session tracking
         if decision == EventDecision.QUARANTINE:
             self.quarantined_sessions.add(session_id)
             ACTIVE_QUARANTINES.set(len(self.quarantined_sessions))
 
         # 6. Audit Logging & State Update
+        await self.storage.record_event(session_id, agent_id, event.model_dump(mode="json"))
         await self.audit_logger.log_event(event)
         self.broadcast_event(event.model_dump(mode="json"))
 
-        # Update baseline counts if safe (stability gating)
-        if decision in (EventDecision.ALLOW, EventDecision.FLAG):
+        # Update baseline counts if safe (stability gating & non-circular contamination quarantine)
+        if decision == EventDecision.ALLOW and session_id not in self.contaminated_sessions:
             self.window_mgr.record_tool(session_id, tool_name)
+            self.agent_recent_tools[agent_id].append(tool_name)
             agent_tools[tool_name] = tool_count + 1
             if dest_domain:
                 agent_dests[dest_domain] = dest_count + 1
-            if prev_tools:
-                self.markov_scorer.update(prev_tools[-1], tool_name)
+            if effective_prev_tools:
+                self.markov_scorer.update(effective_prev_tools[-1], tool_name)
 
-            if decision == EventDecision.ALLOW:
-                self.agent_allowed_events[agent_id].append(event)
-                if_vec = [
-                    if_f.param_size_bytes_z,
-                    if_f.param_entropy_z,
-                    if_f.response_size_bytes_z,
-                    if_f.time_since_previous_ms_z,
-                    if_f.session_duration_ms_z,
-                    if_f.sequence_position_z,
-                    if_f.destination_novelty,
-                    if_f.tool_novelty,
+            # Running stats update guarded by non-circular contamination quarantine
+            self.running_scaler.update("param_size", float(param_bytes))
+            self.running_scaler.update("entropy", event.parameter_entropy)
+            if time_since_prev_ms is not None:
+                self.running_scaler.update("time_diff", float(time_since_prev_ms))
+            self.running_scaler.update("duration", float(duration_scaled))
+            self.running_scaler.update("seq_pos", float(seq_pos_scaled))
+
+            await self.storage.update_running_stats(
+                agent_id,
+                [
+                    float(param_bytes),
+                    float(event.parameter_entropy),
+                    float(time_since_prev_ms or 0.0),
+                    float(duration_scaled),
+                    float(seq_pos_scaled),
+                ],
+            )
+
+            self.agent_allowed_events[agent_id].append(event)
+            if_vec = [
+                if_f.param_size_bytes_z,
+                if_f.param_entropy_z,
+                if_f.response_size_bytes_z,
+                if_f.time_since_previous_ms_z,
+                if_f.session_duration_ms_z,
+                if_f.sequence_position_z,
+                if_f.destination_novelty,
+                if_f.tool_novelty,
+            ]
+            # BUG-H4 fix: Per-agent IF buffer
+            self.agent_if_buffers[agent_id].append(if_vec)
+            self.agent_observation_counts[agent_id] += 1
+            self.transformer_training_sequences.setdefault(session_id, []).append(tool_name)
+
+            agent_obs = self.agent_observation_counts[agent_id]
+            if not self.isolation_scorer.is_fitted and agent_obs >= settings.warm_threshold_calls:
+                self.isolation_scorer.fit(np.array(self.agent_if_buffers[agent_id]))
+
+            if not self.transformer_scorer.is_fitted and agent_obs >= settings.warm_threshold_calls:
+                clean_sequences = [
+                    seq
+                    for sid, seq in self.transformer_training_sequences.items()
+                    if sid not in self.contaminated_sessions
                 ]
-                # BUG-H4 fix: Per-agent IF buffer
-                self.agent_if_buffers[agent_id].append(if_vec)
-                self.agent_observation_counts[agent_id] += 1
-                self.transformer_training_sequences.setdefault(session_id, []).append(tool_name)
-
-                agent_obs = self.agent_observation_counts[agent_id]
-                if (
-                    not self.isolation_scorer.is_fitted
-                    and agent_obs >= settings.warm_threshold_calls
-                ):
-                    self.isolation_scorer.fit(np.array(self.agent_if_buffers[agent_id]))
-
-                if (
-                    not self.transformer_scorer.is_fitted
-                    and agent_obs >= settings.warm_threshold_calls
-                ):
-                    self.transformer_scorer.fit(list(self.transformer_training_sequences.values()))
+                if clean_sequences:
+                    self.transformer_scorer.fit(clean_sequences)
 
         elif decision in (EventDecision.BLOCK, EventDecision.QUARANTINE):
             # Closed-loop policy synthesis: generate candidate Rego rule
@@ -646,6 +718,18 @@ async def api_pending_policies():
     return engine.policy_synthesizer.list_pending_policies()
 
 
+def _event_sort_key(e: dict[str, Any]) -> float:
+    ts = e.get("timestamp")
+    if isinstance(ts, (int, float)):
+        return float(ts)
+    if isinstance(ts, str):
+        try:
+            return datetime.fromisoformat(ts).timestamp()
+        except Exception:
+            return 0.0
+    return 0.0
+
+
 @app.get("/api/events")
 async def api_get_events(limit: int = 50):
     """Return recent events across all sessions for live dashboard feed."""
@@ -655,7 +739,7 @@ async def api_get_events(limit: int = 50):
         events = await engine.storage.get_session_history(sid, limit=limit)
         all_events.extend(events)
     # Sort by timestamp descending
-    all_events.sort(key=lambda e: e.get("timestamp", 0), reverse=True)
+    all_events.sort(key=_event_sort_key, reverse=True)
     return all_events[:limit]
 
 
@@ -816,7 +900,34 @@ async def simulate_policy(payload: dict[str, Any] = Body(...)):  # noqa: B008
     return await opa_client.simulate(event, static_scan=static_scan, policy_overrides=overrides)
 
 
-@app.post("/baselines/{agent_id}/promote")
+def verify_admin_auth(
+    x_admin_token: str | None = Header(default=None, alias="X-Admin-Token"),
+    authorization: str | None = Header(default=None, alias="Authorization"),
+) -> None:
+    """Verifies administrator authentication token for control plane endpoints (BUG-B7 fix).
+
+    Enforces constant-time comparison against settings.admin_api_token when configured.
+    """
+    token_configured = settings.admin_api_token.strip()
+    if not token_configured:
+        return
+
+    provided_token = x_admin_token
+    if not provided_token and authorization:
+        if authorization.startswith("Bearer "):
+            provided_token = authorization.split(" ", 1)[1]
+        else:
+            provided_token = authorization
+
+    if not provided_token or not hmac.compare_digest(provided_token, token_configured):
+        raise HTTPException(
+            status_code=401,
+            detail="Unauthorized: Invalid or missing X-Admin-Token",
+        )
+
+
+@app.post("/baselines/{agent_id}/promote", dependencies=[Depends(verify_admin_auth)])
+@app.post("/api/baselines/{agent_id}/refit", dependencies=[Depends(verify_admin_auth)])
 async def promote_agent_baseline(agent_id: str):
     """Manually trigger online refit and snapshot promotion for an agent."""
     await engine.run_online_refit(target_agent_id=agent_id)
@@ -828,13 +939,14 @@ async def promote_agent_baseline(agent_id: str):
     }
 
 
-@app.get("/admin/policies/pending")
+@app.get("/admin/policies/pending", dependencies=[Depends(verify_admin_auth)])
 async def list_pending_policies():
     """List pending auto-synthesized Rego policies."""
     return engine.policy_synthesizer.list_pending_policies()
 
 
-@app.post("/admin/policies/{policy_id}/approve")
+@app.post("/admin/policies/{policy_id}/approve", dependencies=[Depends(verify_admin_auth)])
+@app.post("/api/policies/{policy_id}/approve", dependencies=[Depends(verify_admin_auth)])
 async def approve_policy(policy_id: str):
     """Approve candidate synthesized policy and push to OPA (BUG-M2 fix)."""
     ok = engine.policy_synthesizer.approve_policy(policy_id)
@@ -859,7 +971,8 @@ async def approve_policy(policy_id: str):
     return {"status": "approved", "policy_id": policy_id}
 
 
-@app.post("/admin/policies/{policy_id}/reject")
+@app.post("/admin/policies/{policy_id}/reject", dependencies=[Depends(verify_admin_auth)])
+@app.post("/api/policies/{policy_id}/reject", dependencies=[Depends(verify_admin_auth)])
 async def reject_policy(policy_id: str):
     """Reject candidate synthesized policy."""
     ok = engine.policy_synthesizer.reject_policy(policy_id)
@@ -882,7 +995,18 @@ async def mcp_proxy_gateway(
     body = await request.json()
     req_id = body.get("id", 1)
     method = body.get("method", "tools/call")
-    params = body.get("params", {})
+    params = body.get("params", {}) if isinstance(body, dict) else {}
+    meta = params.get("_meta", {}) if isinstance(params, dict) else {}
+    payload_agent = (
+        meta.get("agent_id")
+        or (params.get("agent_id") if isinstance(params, dict) else None)
+        or (body.get("agent_id") if isinstance(body, dict) else None)
+    )
+    payload_session = (
+        meta.get("session_id")
+        or (params.get("session_id") if isinstance(params, dict) else None)
+        or (body.get("session_id") if isinstance(body, dict) else None)
+    )
 
     # Extract signature token
     raw_token = x_cerberus_signature or authorization
@@ -908,7 +1032,14 @@ async def mcp_proxy_gateway(
             }
         trust_level = "verified"
         agent_id = verified_agent
-        session_id = x_session_id or f"session-{uuid.uuid4().hex[:8]}"
+        # Cryptographic session binding: namespace session to authenticated token to prevent session-splitting
+        safe_raw_token = raw_token or ""
+        token_fingerprint = hashlib.sha256(safe_raw_token.encode("utf-8")).hexdigest()[:12]
+        provided_session = x_session_id or payload_session
+        if provided_session:
+            session_id = f"{agent_id}:{token_fingerprint}:{provided_session}"
+        else:
+            session_id = f"{agent_id}:{token_fingerprint}"
     else:
         # Permissive mode
         if verified_agent:
@@ -918,11 +1049,15 @@ async def mcp_proxy_gateway(
             trust_level = "unverified"
             if x_agent_id and x_agent_id != "default-agent":
                 agent_id = x_agent_id
+            elif payload_agent:
+                agent_id = payload_agent
             else:
                 agent_id = f"agent-unverified-{uuid.uuid4().hex[:8]}"
 
         if x_session_id and x_session_id != "default-session":
             session_id = x_session_id
+        elif payload_session:
+            session_id = payload_session
         else:
             session_id = f"session-{uuid.uuid4().hex[:8]}"
 
@@ -1019,7 +1154,8 @@ async def mcp_proxy_gateway(
 
     # Default to tools/call processing
     tool_name = params.get("name", "unknown_tool")
-    arguments = params.get("arguments", params)
+    raw_arguments = params.get("arguments", params)
+    arguments: dict[str, Any] = raw_arguments if isinstance(raw_arguments, dict) else {}
     tool_server = params.get("server", "upstream-server")
 
     event, outcome = await engine.process_tool_call(

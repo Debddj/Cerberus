@@ -83,9 +83,9 @@ class RuleBasedScorer:
                 f"Cumulative Egress Drip: High sequence position ({features.sequence_position}) sustained egress burst to external destination"
             )
 
-        # Check: High entropy parameter spike
-        if features.param_entropy > 6.8:
-            score = max(score, 0.65)
+        # Check: High entropy parameter spike (encoded binary/base64 payload)
+        if features.param_entropy > 5.0:
+            score = max(score, 0.58)
             factors.append(
                 f"High parameter entropy ({features.param_entropy:.2f} bits) indicating possible encoded payload"
             )

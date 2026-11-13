@@ -9,12 +9,20 @@ from pydantic import BaseModel, Field
 class EventDecision(str, Enum):
     ALLOW = "allow"
     FLAG = "flag"
+    CHALLENGE = "challenge"
     BLOCK = "block"
     QUARANTINE = "quarantine"
 
 
 class ToolCallEvent(BaseModel):
-    """Normalized intercepted tool call event."""
+    """Normalized intercepted tool call event.
+
+    INVARIANT:
+    - `parameters` stores sanitized / redacted parameters for safe logging, persistence, and audit.
+    - `parameter_size_bytes` and `parameter_entropy` are pre-computed on unredacted raw parameters
+      immediately upon proxy ingress to preserve behavioral anomaly detection fidelity without
+      leaking secrets into downstream features or models.
+    """
 
     # Identity & Trust
     event_id: str = Field(default_factory=lambda: str(uuid.uuid4()))
@@ -115,6 +123,7 @@ class AgentBaseline(BaseModel):
     total_calls_observed: int = 0
     snapshots: list[BaselineSnapshot] = Field(default_factory=list)
     active_snapshot_id: str | None = None
+    anchor_snapshot_id: str | None = None
     known_tools: set[str] = Field(default_factory=set)
     known_destinations: set[str] = Field(default_factory=set)
     avg_param_entropy: float = 0.0

@@ -69,3 +69,50 @@ class SchemaPinner:
             )
             await db.commit()
             return True, None
+
+    async def pin_schema(
+        self,
+        server_url: str,
+        tool_name: str,
+        desc: str,
+        schema: dict,
+        overwrite: bool = False,
+    ) -> tuple[bool, str]:
+        """Pre-pin a tool schema ahead of time (mitigating TOFU vulnerability)."""
+        await self.init_db()
+        d_hash, s_hash = self.compute_hash(desc, schema)
+        now = datetime.now(UTC).isoformat()
+
+        async with aiosqlite.connect(self.db_path) as db:
+            async with db.execute(
+                "SELECT description_hash, schema_hash, pin_version FROM schema_pins WHERE server_url=? AND tool_name=?",
+                (server_url, tool_name),
+            ) as cursor:
+                row = await cursor.fetchone()
+
+            if row and not overwrite:
+                return (
+                    False,
+                    f"Tool '{tool_name}' on server '{server_url}' is already pinned. Pass overwrite=True to update.",
+                )
+
+            version = (row[2] + 1) if row else 1
+            await db.execute(
+                """
+                INSERT INTO schema_pins (server_url, tool_name, description_hash, schema_hash, first_seen, last_verified, pin_version)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(server_url, tool_name) DO UPDATE SET
+                    description_hash=excluded.description_hash,
+                    schema_hash=excluded.schema_hash,
+                    last_verified=excluded.last_verified,
+                    pin_version=excluded.pin_version
+                """,
+                (server_url, tool_name, d_hash, s_hash, now, now, version),
+            )
+            await db.commit()
+
+        action = "Updated" if row else "Pinned"
+        return (
+            True,
+            f"{action} pin for tool '{tool_name}' on server '{server_url}' (version {version})",
+        )

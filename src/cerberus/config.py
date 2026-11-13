@@ -11,7 +11,7 @@ class CerberusSettings(BaseSettings):
     debug: bool = False
 
     # Network and Proxy settings
-    proxy_host: str = "0.0.0.0"
+    proxy_host: str = "127.0.0.1"
     proxy_port: int = 8000
     metrics_port: int = 9090
 
@@ -31,6 +31,8 @@ class CerberusSettings(BaseSettings):
     risk_quarantine_threshold: float = 0.90
     risk_block_threshold: float = 0.70
     risk_flag_threshold: float = 0.40
+    tvd_anchor_max_drift: float = 0.40
+    tvd_step_max_divergence: float = 0.50
 
     # Online learning & retraining intervals
     if_refit_interval: int = 200
@@ -48,6 +50,9 @@ class CerberusSettings(BaseSettings):
     encrypt_logs: bool = True
     log_encryption_key: str = ""
     log_encryption_key_path: str = ""
+    log_hmac_key: str = ""
+    log_hmac_key_path: str = ""
+    admin_api_token: str = ""
 
     # Static scanner toggles
     trifecta_override: bool = False

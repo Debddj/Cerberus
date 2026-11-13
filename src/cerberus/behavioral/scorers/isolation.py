@@ -9,7 +9,17 @@ from cerberus.proxy.models import IsolationForestFeatures
 
 
 class IsolationForestScorer:
-    """Detects multi-dimensional numeric/continuous anomalies on z-scaled features."""
+    """Detects multi-dimensional numeric/continuous anomalies on robust z-scaled features.
+
+    Note on Scaling & Invariance:
+    While axis-aligned orthogonal tree splits in scikit-learn IsolationForest are invariant
+    under strictly monotonic affine transformations, z-scores are preserved because the
+    surrounding proxy architecture directly relies on them:
+    1. The Tier 1 cheap escalation circuit (`server.py:343-352`) specifically inspects
+       `abs(z) >= 3.0` to trigger Tier 2 isolation scoring.
+    2. Robust scaling (Median/MAD) guarantees that adversarial outliers do not skew the baseline
+       distribution, maintaining valid 3-sigma escalation criteria.
+    """
 
     def __init__(self):
         if IsolationForest is not None:
@@ -44,10 +54,11 @@ class IsolationForestScorer:
         )
 
         raw_score = self.model.decision_function(vec)[0]
-        normalized_score = float(np.clip(0.5 - raw_score, 0.0, 1.0))
+        # Calibrate decision_function range [-0.22, +0.13] onto [0.0, 1.0] risk scale
+        normalized_score = float(np.clip(0.50 - 1.5 * raw_score, 0.0, 1.0))
 
         factors = []
-        if normalized_score > 0.70:
+        if normalized_score >= 0.70:
             factors.append(
                 "Multivariate feature anomaly: Vector is an outlier across payload entropy, size, and novelty"
             )

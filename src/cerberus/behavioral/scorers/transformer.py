@@ -1,12 +1,24 @@
+"""Sequence Neural Transition Model for Cerberus behavioral firewall.
+
+Implements a zero-dependency, pure NumPy neural next-token transition embedding predictor.
+Trained per agent archetype with Mean Squared Error (MSE) loss to predict continuous embedding
+representations of expected next tool transitions (t_i -> t_{i+1}) from the current tool invocation.
+Note: This is a pure NumPy continuous latent-space transition predictor trained with MSE,
+NOT a PyTorch autoencoder and NOT sliding-window cross-entropy.
+"""
+
 import math
 
 import numpy as np
 
 
 class SequenceTransformerScorer:
-    """
-    Lightweight Sequence Neural Autoencoder for detecting anomalous tool chains.
-    Learns dense representations of tool transitions and flags high reconstruction error.
+    """Zero-dependency pure NumPy neural next-token transition embedding predictor.
+
+    Learns continuous embedding representations of expected tool transitions (t_i -> t_{i+1})
+    and flags elevated Mean Squared Error (MSE) transition prediction error as deep sequence drift.
+    Note: This is a lightweight NumPy transition model trained with MSE, NOT a PyTorch autoencoder
+    and NOT sliding-window cross-entropy.
     """
 
     def __init__(self, embedding_dim: int = 16, hidden_dim: int = 32, max_vocab: int = 64):

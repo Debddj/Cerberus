@@ -36,6 +36,27 @@ def _atomic_write_joblib(target_path: str, obj: Any) -> None:
     shutil.move(temp_name, target_path)
 
 
+def compute_tvd(matrix_a: dict[str, dict[str, int]], matrix_b: dict[str, dict[str, int]]) -> float:
+    """Computes row-wise maximum Total Variation Distance (TVD) between two Markov transition matrices.
+
+    TVD(A, B) = max_{u} 0.5 * sum_{v} |P_A(v|u) - P_B(v|u)|
+    """
+    max_tvd = 0.0
+    all_from_tools = set(matrix_a.keys()).union(set(matrix_b.keys()))
+    for from_tool in all_from_tools:
+        row_a = matrix_a.get(from_tool, {})
+        row_b = matrix_b.get(from_tool, {})
+        total_a = sum(row_a.values()) or 1
+        total_b = sum(row_b.values()) or 1
+
+        all_to_tools = set(row_a.keys()).union(set(row_b.keys()))
+        tvd = 0.5 * sum(
+            abs((row_a.get(t, 0) / total_a) - (row_b.get(t, 0) / total_b)) for t in all_to_tools
+        )
+        max_tvd = max(max_tvd, tvd)
+    return max_tvd
+
+
 class BaselineStore:
     """Manages versioned baseline snapshots and stability gating to prevent boiling-frog poisoning."""
 
@@ -59,8 +80,8 @@ class BaselineStore:
         new_transition_matrix: dict[str, dict[str, int]],
         max_divergence: float = 0.5,
     ) -> tuple[bool, str]:
-        """Anti-poisoning stability gate: checks if new transition matrix deviates too drastically
-        from the active baseline to prevent boiling-frog attacks."""
+        """Anti-poisoning stability gate: enforces dual gating against step divergence
+        and cumulative drift from frozen anchor baseline (boiling-frog guard)."""
         baseline = self.get_baseline(agent_id)
         if not baseline.active_snapshot_id or not baseline.snapshots:
             return True, "Initial baseline - no prior snapshot to compare"
@@ -75,29 +96,44 @@ class BaselineStore:
             with open(active_snap.transition_matrix_path, "r", encoding="utf-8") as f:
                 old_matrix = json.load(f)
 
-            # Compute max row-level Total Variation Distance (TVD)
-            max_tvd = 0.0
-            all_from_tools = set(old_matrix.keys()).union(set(new_transition_matrix.keys()))
-            for from_tool in all_from_tools:
-                old_row = old_matrix.get(from_tool, {})
-                new_row = new_transition_matrix.get(from_tool, {})
-                old_total = sum(old_row.values()) or 1
-                new_total = sum(new_row.values()) or 1
-
-                all_to_tools = set(old_row.keys()).union(set(new_row.keys()))
-                tvd = 0.5 * sum(
-                    abs((old_row.get(t, 0) / old_total) - (new_row.get(t, 0) / new_total))
-                    for t in all_to_tools
-                )
-                max_tvd = max(max_tvd, tvd)
-
-            if max_tvd > max_divergence:
+            # 1. Step-wise divergence check against active snapshot
+            step_tvd = compute_tvd(old_matrix, new_transition_matrix)
+            if step_tvd > max_divergence:
                 return (
                     False,
-                    f"Baseline shift rejected: TVD {max_tvd:.3f} exceeds threshold {max_divergence:.3f} (boiling-frog guard)",
+                    f"Baseline shift rejected: TVD {step_tvd:.3f} exceeds threshold {max_divergence:.3f} (boiling-frog guard)",
                 )
 
-            return True, f"Stability verified (max TVD: {max_tvd:.3f})"
+            # 2. Cumulative drift check against frozen anchor baseline
+            from cerberus.config import settings
+
+            env_drift = os.environ.get("CERBERUS_TVD_ANCHOR_MAX_DRIFT")
+            if env_drift is not None:
+                try:
+                    anchor_max_drift = float(env_drift)
+                except ValueError:
+                    anchor_max_drift = getattr(settings, "tvd_anchor_max_drift", 0.40)
+            else:
+                anchor_max_drift = getattr(settings, "tvd_anchor_max_drift", 0.40)
+
+            anchor_snap_id = baseline.anchor_snapshot_id or (
+                baseline.snapshots[0].snapshot_id if baseline.snapshots else None
+            )
+            if anchor_snap_id:
+                anchor_snap = next(
+                    (s for s in baseline.snapshots if s.snapshot_id == anchor_snap_id), None
+                )
+                if anchor_snap and os.path.exists(anchor_snap.transition_matrix_path):
+                    with open(anchor_snap.transition_matrix_path, "r", encoding="utf-8") as f:
+                        anchor_matrix = json.load(f)
+                    anchor_tvd = compute_tvd(anchor_matrix, new_transition_matrix)
+                    if anchor_tvd > anchor_max_drift:
+                        return (
+                            False,
+                            f"Cumulative baseline drift rejected: Anchor TVD {anchor_tvd:.3f} exceeds drift budget {anchor_max_drift:.3f} (boiling-frog guard)",
+                        )
+
+            return True, f"Stability verified (max TVD: {step_tvd:.3f})"
         except Exception as e:
             logger.warning(f"Error checking baseline stability: {e}")
             return False, f"Stability check failed (fail-closed on error): {e}"
@@ -161,12 +197,14 @@ class BaselineStore:
 
         baseline.snapshots.append(snapshot)
         baseline.active_snapshot_id = snap_id
+        if baseline.anchor_snapshot_id is None:
+            baseline.anchor_snapshot_id = snap_id
         baseline.is_warm = calls_count >= baseline.warm_threshold_calls
         baseline.last_updated = datetime.now(UTC)
         return snapshot
 
-    def promote_snapshot(self, agent_id: str, snapshot_id: str) -> bool:
-        """Promote an existing snapshot to active."""
+    def promote_snapshot(self, agent_id: str, snapshot_id: str, make_anchor: bool = True) -> bool:
+        """Promote an existing snapshot to active. Optionally sets it as the frozen anchor."""
         baseline = self.get_baseline(agent_id)
         found = False
         for s in baseline.snapshots:
@@ -177,6 +215,17 @@ class BaselineStore:
                 s.is_active = False
         if found:
             baseline.active_snapshot_id = snapshot_id
+            if make_anchor:
+                baseline.anchor_snapshot_id = snapshot_id
+            baseline.last_updated = datetime.now(UTC)
+        return found
+
+    def set_anchor_snapshot(self, agent_id: str, snapshot_id: str) -> bool:
+        """Explicitly update the frozen anchor snapshot for an agent (administrative re-anchoring)."""
+        baseline = self.get_baseline(agent_id)
+        found = any(s.snapshot_id == snapshot_id for s in baseline.snapshots)
+        if found:
+            baseline.anchor_snapshot_id = snapshot_id
             baseline.last_updated = datetime.now(UTC)
         return found
 

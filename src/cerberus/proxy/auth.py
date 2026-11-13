@@ -31,13 +31,27 @@ class HMACAuthenticator:
             )
             key_file = os.path.join(log_dir, "cerberus_hmac.key")
         if os.path.exists(key_file):
+            if os.name != "nt":
+                try:
+                    mode = os.stat(key_file).st_mode
+                    if mode & 0o077:
+                        logger.warning(
+                            "HMAC key file %s has overly permissive permissions (%o). "
+                            "Consider running `chmod 600 %s`",
+                            key_file,
+                            mode & 0o777,
+                            key_file,
+                        )
+                except OSError as e:
+                    logger.debug("Failed to check key permissions: %s", e)
             with open(key_file, "r", encoding="utf-8") as f:
                 key = f.read().strip()
                 if key:
                     return key
         generated = secrets.token_hex(32)
         try:
-            with open(key_file, "w", encoding="utf-8") as f:
+            fd = os.open(key_file, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+            with os.fdopen(fd, "w", encoding="utf-8") as f:
                 f.write(generated)
             logger.info("Generated new HMAC authentication secret at %s", key_file)
         except Exception as e:

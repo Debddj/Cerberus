@@ -8,7 +8,7 @@ export interface ToolCallEvent {
   parameter_size_bytes?: number;
   parameter_entropy?: number;
   destination_domain?: string | null;
-  timestamp: number;
+  timestamp: string | number;
   time_since_previous_ms?: number | null;
   session_duration_ms?: number | null;
   sequence_position: number;

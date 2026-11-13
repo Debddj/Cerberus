@@ -58,10 +58,11 @@ async def execute_benchmark():
             )
 
     # Bug 10 Fix: Isolation Forest trained on REAL accumulated feature vectors (not random noise)
-    if engine.if_buffer and not engine.isolation_scorer.is_fitted:
-        engine.isolation_scorer.fit(np.array(engine.if_buffer))
+    all_if_vectors = [vec for buf in engine.agent_if_buffers.values() for vec in buf]
+    if all_if_vectors and not engine.isolation_scorer.is_fitted:
+        engine.isolation_scorer.fit(np.array(all_if_vectors))
     print(
-        f"Baselines warmed successfully across {len(train_streams)} archetypes ({len(engine.if_buffer)} real vectors)."
+        f"Baselines warmed successfully across {len(train_streams)} archetypes ({len(all_if_vectors)} real vectors)."
     )
 
     # 2. Measure False Positive Rate & Latency Overhead

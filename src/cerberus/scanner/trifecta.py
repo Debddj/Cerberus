@@ -26,6 +26,9 @@ class LethalTrifectaDetector:
         "search_web",
         "parse_issue",
         "receive_email",
+        "public_issue",
+        "read_public",
+        "untrusted",
     }
     EXTERNAL_EGRESS_KEYWORDS: ClassVar[set[str]] = {
         "http_post",

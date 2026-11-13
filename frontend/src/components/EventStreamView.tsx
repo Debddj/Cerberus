@@ -81,6 +81,16 @@ export const EventStreamView: React.FC<EventStreamViewProps> = ({ events, isStre
     return 'text-emerald-400 bg-emerald-500/10 border-emerald-500/30';
   };
 
+  const formatTimestamp = (ts?: string | number | null) => {
+    if (!ts) return 'just now';
+    if (typeof ts === 'number') {
+      const d = new Date(ts > 1e11 ? ts : ts * 1000);
+      return isNaN(d.getTime()) ? 'just now' : d.toLocaleTimeString();
+    }
+    const d = new Date(ts);
+    return isNaN(d.getTime()) ? 'just now' : d.toLocaleTimeString();
+  };
+
   return (
     <div className="space-y-6">
       {/* Top Controls & Metrics Bar */}
@@ -194,7 +204,7 @@ export const EventStreamView: React.FC<EventStreamViewProps> = ({ events, isStre
                 <div className="text-right text-xs text-slate-400 font-mono">
                   <div className="flex items-center space-x-1">
                     <Clock className="w-3 h-3 text-slate-500" />
-                    <span>{new Date(event.timestamp * 1000).toLocaleTimeString()}</span>
+                    <span>{formatTimestamp(event.timestamp)}</span>
                   </div>
                   <span className="text-slate-500">
                     {event.time_since_previous_ms ? `+${event.time_since_previous_ms.toFixed(0)}ms` : 'initial'}

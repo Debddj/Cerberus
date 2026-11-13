@@ -78,8 +78,9 @@ class OPAClient:
         severity = {
             EventDecision.ALLOW: 0,
             EventDecision.FLAG: 1,
-            EventDecision.QUARANTINE: 2,
+            EventDecision.CHALLENGE: 2,
             EventDecision.BLOCK: 3,
+            EventDecision.QUARANTINE: 4,
         }
 
         try:
@@ -130,8 +131,9 @@ class OPAClient:
         severity = {
             "allow": 0,
             "flag": 1,
-            "quarantine": 2,
+            "challenge": 2,
             "block": 3,
+            "quarantine": 4,
         }
         highest = "allow"
 
