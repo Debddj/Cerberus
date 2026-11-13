@@ -82,4 +82,3 @@ async def test_admin_api_open_in_dev_when_unconfigured():
             assert isinstance(res.json(), list)
     finally:
         settings.admin_api_token = orig_token
-
