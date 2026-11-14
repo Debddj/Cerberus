@@ -671,6 +671,15 @@ class ResponseInspector:
 
         return sanitized_tools, results
 
+    def inspect_tools_list(
+        self,
+        tools: list[dict[str, Any]],
+        session_id: str | None = None,
+    ) -> list[dict[str, Any]]:
+        """Inspect and sanitize tool descriptions from a tools/list response."""
+        sanitized_tools, _ = self.inspect_tool_descriptions(tools, session_id=session_id)
+        return sanitized_tools
+
     async def inspect_tool_descriptions_async(
         self,
         tools: list[dict[str, Any]],

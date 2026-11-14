@@ -17,6 +17,7 @@ import secrets
 import threading
 import urllib.parse
 import uuid
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from enum import Enum
@@ -365,7 +366,7 @@ class CanaryRegistry:
 
         return token_obj
 
-    def register_many(self, tokens: list[CanaryToken | str]) -> list[CanaryToken]:
+    def register_many(self, tokens: Sequence[CanaryToken | str]) -> list[CanaryToken]:
         """Bulk register multiple honeytokens."""
         registered = []
         with self._lock:

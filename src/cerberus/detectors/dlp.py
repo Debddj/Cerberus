@@ -770,7 +770,7 @@ class EgressDLPDetector:
         if findings:
             categories = sorted({f.category for f in findings})
             reason = f"DLP payload violation: detected {', '.join(categories)}"
-            alert = {
+            payload_alert: dict[str, Any] = {
                 "timestamp": datetime.now(UTC).isoformat(),
                 "alert_type": "DLP_PAYLOAD_VIOLATION",
                 "session_id": event.session_id,
@@ -789,7 +789,7 @@ class EgressDLPDetector:
                 ],
             }
             with self._lock:
-                self._alerts.append(alert)
+                self._alerts.append(payload_alert)
 
             return DLPResult(
                 allowed=False,
@@ -798,7 +798,7 @@ class EgressDLPDetector:
                 findings=findings,
                 quota_result=None,
                 reason=reason,
-                alert=alert,
+                alert=payload_alert,
             )
 
         # 2. Check Quota Budgets for Egress Tools
@@ -818,7 +818,7 @@ class EgressDLPDetector:
             )
 
             if not quota_res.allowed:
-                alert = {
+                quota_alert: dict[str, Any] = {
                     "timestamp": datetime.now(UTC).isoformat(),
                     "alert_type": "DLP_QUOTA_EXCEEDED",
                     "violation_type": quota_res.violation_type,
@@ -832,7 +832,7 @@ class EgressDLPDetector:
                     "reason": quota_res.reason,
                 }
                 with self._lock:
-                    self._alerts.append(alert)
+                    self._alerts.append(quota_alert)
 
                 return DLPResult(
                     allowed=False,
@@ -841,7 +841,7 @@ class EgressDLPDetector:
                     findings=[],
                     quota_result=quota_res,
                     reason=quota_res.reason or "Egress quota exceeded",
-                    alert=alert,
+                    alert=quota_alert,
                 )
 
             # Record approved egress
