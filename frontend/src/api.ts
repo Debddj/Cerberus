@@ -6,7 +6,11 @@ import {
   AuditRecord, 
   AuditVerifyResult, 
   Policy, 
-  BaselineAgent 
+  BaselineAgent,
+  ChallengeItem,
+  ScannerSummary,
+  IssuedToken,
+  BenchmarkResults
 } from './types';
 
 const API_BASE = '';
@@ -104,4 +108,54 @@ export function subscribeToEventStream(onEvent: (event: ToolCallEvent) => void):
     }
   };
   return () => source.close();
+}
+
+export async function fetchScannersSummary(): Promise<ScannerSummary> {
+  const res = await fetch(`${API_BASE}/api/scanners/summary`);
+  if (!res.ok) throw new Error('Failed to fetch scanners summary');
+  return res.json();
+}
+
+export async function fetchChallenges(): Promise<ChallengeItem[]> {
+  const res = await fetch(`${API_BASE}/api/challenges`);
+  if (!res.ok) throw new Error('Failed to fetch challenges');
+  return res.json();
+}
+
+export async function resolveChallenge(
+  challengeId: string, 
+  action: 'approve' | 'reject', 
+  reason?: string
+): Promise<any> {
+  const res = await fetch(`${API_BASE}/api/challenges/${challengeId}/resolve`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ action, reason }),
+  });
+  if (!res.ok) throw new Error('Failed to resolve challenge');
+  return res.json();
+}
+
+export async function quarantineSession(sessionId: string): Promise<any> {
+  const res = await fetch(`${API_BASE}/api/sessions/${sessionId}/quarantine`, {
+    method: 'POST',
+  });
+  if (!res.ok) throw new Error('Failed to quarantine session');
+  return res.json();
+}
+
+export async function issueToken(agentId: string, ttl: number = 3600): Promise<IssuedToken> {
+  const res = await fetch(`${API_BASE}/api/tokens/issue`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ agent_id: agentId, ttl_seconds: ttl }),
+  });
+  if (!res.ok) throw new Error('Failed to issue token');
+  return res.json();
+}
+
+export async function fetchBenchmarks(): Promise<BenchmarkResults> {
+  const res = await fetch(`${API_BASE}/api/benchmarks`);
+  if (!res.ok) throw new Error('Failed to fetch benchmarks');
+  return res.json();
 }

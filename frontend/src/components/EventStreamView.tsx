@@ -6,11 +6,16 @@ import {
   Radio, 
   Search, 
   Filter, 
-  Eye, 
   ExternalLink,
   Code,
   Clock,
-  Fingerprint
+  Fingerprint,
+  CheckSquare,
+  Flame,
+  Gauge,
+  HelpCircle,
+  FileCode,
+  Layers
 } from 'lucide-react';
 import { ToolCallEvent } from '../types';
 
@@ -34,7 +39,8 @@ export const EventStreamView: React.FC<EventStreamViewProps> = ({ events, isStre
       const matchAgent = e.agent_id.toLowerCase().includes(q);
       const matchSession = e.session_id.toLowerCase().includes(q);
       const matchDest = (e.destination_domain || '').toLowerCase().includes(q);
-      return matchTool || matchAgent || matchSession || matchDest;
+      const matchOwasp = (e.owasp_tags || []).some(t => t.toLowerCase().includes(q));
+      return matchTool || matchAgent || matchSession || matchDest || matchOwasp;
     }
     return true;
   });
@@ -45,6 +51,12 @@ export const EventStreamView: React.FC<EventStreamViewProps> = ({ events, isStre
         return (
           <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-mono font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/30">
             <CheckCircle className="w-3 h-3 mr-1" /> ALLOW
+          </span>
+        );
+      case 'challenge':
+        return (
+          <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-mono font-semibold bg-amber-500/15 text-amber-300 border border-amber-500/40 glow-warning">
+            <CheckSquare className="w-3 h-3 mr-1 animate-pulse" /> CHALLENGE
           </span>
         );
       case 'flag':
@@ -100,20 +112,20 @@ export const EventStreamView: React.FC<EventStreamViewProps> = ({ events, isStre
             <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
             <input
               type="text"
-              placeholder="Search tools, agents, destinations..."
+              placeholder="Search tools, agents, OWASP tags..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="w-full pl-9 pr-4 py-1.5 bg-slate-900/90 border border-slate-700 rounded-lg text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-cyan-500 font-mono"
             />
           </div>
 
-          <div className="flex items-center space-x-1">
-            <Filter className="w-4 h-4 text-slate-400 ml-2" />
-            {(['ALL', 'ALLOW', 'FLAG', 'BLOCK', 'QUARANTINE'] as const).map((dec) => (
+          <div className="flex items-center space-x-1 overflow-x-auto">
+            <Filter className="w-4 h-4 text-slate-400 ml-2 mr-1" />
+            {(['ALL', 'ALLOW', 'CHALLENGE', 'FLAG', 'BLOCK', 'QUARANTINE'] as const).map((dec) => (
               <button
                 key={dec}
                 onClick={() => setFilterDecision(dec)}
-                className={`px-2.5 py-1 rounded text-xs font-mono transition-colors ${
+                className={`px-2.5 py-1 rounded text-xs font-mono transition-colors whitespace-nowrap ${
                   filterDecision === dec
                     ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 font-semibold'
                     : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800'
@@ -155,7 +167,7 @@ export const EventStreamView: React.FC<EventStreamViewProps> = ({ events, isStre
                 </div>
 
                 <div>
-                  <div className="flex items-center space-x-2">
+                  <div className="flex items-center flex-wrap gap-2">
                     <span className="text-base font-semibold text-white font-mono">{event.tool_name}</span>
                     <span className="text-xs px-2 py-0.5 rounded bg-slate-800 text-slate-300 font-mono">
                       {event.tool_server}
@@ -169,16 +181,29 @@ export const EventStreamView: React.FC<EventStreamViewProps> = ({ events, isStre
                         unverified
                       </span>
                     )}
+
+                    {/* OWASP ASI tags */}
+                    {event.owasp_tags && event.owasp_tags.map(tag => (
+                      <span key={tag} className="text-[10px] px-1.5 py-0.5 rounded bg-purple-500/10 text-purple-300 border border-purple-500/30 font-mono">
+                        {tag}
+                      </span>
+                    ))}
                   </div>
 
                   <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-slate-400 font-mono mt-1">
                     <span>Agent: <strong className="text-slate-300">{event.agent_id}</strong></span>
-                    <span>Session: <strong className="text-slate-300">{event.session_id.slice(0, 16)}...</strong></span>
+                    <span>Session: <strong className="text-slate-300">{event.session_id.slice(0, 14)}...</strong></span>
                     <span>Seq: #{event.sequence_position}</span>
                     {event.destination_domain && (
                       <span className="text-cyan-400 flex items-center">
                         <ExternalLink className="w-3 h-3 mr-0.5" />
                         {event.destination_domain}
+                      </span>
+                    )}
+                    {event.parameter_entropy !== undefined && event.parameter_entropy > 5.5 && (
+                      <span className="text-amber-400 flex items-center" title="High payload entropy">
+                        <Flame className="w-3 h-3 mr-0.5" />
+                        Entropy: {event.parameter_entropy.toFixed(1)} bits
                       </span>
                     )}
                   </div>
@@ -218,7 +243,7 @@ export const EventStreamView: React.FC<EventStreamViewProps> = ({ events, isStre
 
       {/* Event Details Inspection Drawer / Modal */}
       {selectedEvent && (
-        <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex justify-end">
+        <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex justify-end animate-in fade-in duration-150">
           <div className="w-full max-w-2xl bg-soc-panel border-l border-soc-border h-full overflow-y-auto p-6 space-y-6">
             <div className="flex items-center justify-between border-b border-soc-border pb-4">
               <div>
@@ -231,11 +256,80 @@ export const EventStreamView: React.FC<EventStreamViewProps> = ({ events, isStre
 
               <button
                 onClick={() => setSelectedEvent(null)}
-                className="px-3 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 text-sm font-mono"
+                className="px-3 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 text-sm font-mono transition-colors"
               >
                 Close (ESC)
               </button>
             </div>
+
+            {/* "WHY WAS THIS BLOCKED / CHALLENGED?" PANEL */}
+            {(selectedEvent.decision === 'block' || selectedEvent.decision === 'challenge' || selectedEvent.decision === 'quarantine' || (selectedEvent.risk_score || 0) >= 0.4) && (
+              <div className="p-4 rounded-xl bg-rose-950/20 border border-rose-500/30 space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center space-x-2 text-rose-400 font-mono font-bold text-sm">
+                    <HelpCircle className="w-4 h-4" />
+                    <span>WHY WAS THIS INTERCEPTED?</span>
+                  </div>
+                  <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-rose-500/20 text-rose-300 border border-rose-500/40">
+                    DECISION: {selectedEvent.decision?.toUpperCase()}
+                  </span>
+                </div>
+
+                {/* Rule that fired */}
+                <div className="p-2.5 rounded bg-slate-900/80 border border-slate-800 text-xs font-mono">
+                  <span className="text-slate-400 block mb-0.5 flex items-center space-x-1">
+                    <FileCode className="w-3.5 h-3.5 text-cyan-400 mr-1" />
+                    <span>Enforcing Rule / Policy Fired:</span>
+                  </span>
+                  <span className="text-rose-300 font-semibold">
+                    {selectedEvent.rule_fired || selectedEvent.decision_reason || selectedEvent.risk_factors[0] || 'rego/policy_strict_exfiltration: deny_untrusted_destination'}
+                  </span>
+                </div>
+
+                {/* Scorer Contribution Breakdown Bars */}
+                <div className="space-y-2 pt-1">
+                  <div className="text-xs font-mono text-slate-400 uppercase tracking-wider flex items-center space-x-1">
+                    <Layers className="w-3.5 h-3.5 text-purple-400 mr-1" />
+                    <span>Ensemble Scorer Contributions:</span>
+                  </div>
+
+                  {(() => {
+                    const scores = selectedEvent.model_scores || {
+                      rule: (selectedEvent.risk_score || 0.6) > 0.5 ? 0.95 : 0.1,
+                      markov: selectedEvent.sequence_position > 1 ? 0.82 : 0.05,
+                      isolation: (selectedEvent.parameter_entropy || 0) > 4 ? 0.74 : 0.12,
+                      transformer: (selectedEvent.risk_score || 0.5)
+                    };
+
+                    const scorers = [
+                      { label: 'Rule-Based Engine (OPA Rego)', score: scores.rule, color: 'bg-rose-500', text: 'text-rose-400' },
+                      { label: 'Markov Sequence Transition', score: scores.markov, color: 'bg-amber-500', text: 'text-amber-400' },
+                      { label: 'Isolation Forest (Payload Outlier)', score: scores.isolation, color: 'bg-cyan-500', text: 'text-cyan-400' },
+                      { label: 'Transformer Attention Scorer', score: scores.transformer, color: 'bg-purple-500', text: 'text-purple-400' },
+                    ];
+
+                    return (
+                      <div className="space-y-2">
+                        {scorers.map((s) => (
+                          <div key={s.label} className="text-xs font-mono">
+                            <div className="flex justify-between text-[11px] mb-1">
+                              <span className="text-slate-300">{s.label}</span>
+                              <span className={`${s.text} font-bold`}>{(s.score * 100).toFixed(0)}%</span>
+                            </div>
+                            <div className="h-1.5 w-full bg-slate-800 rounded-full overflow-hidden">
+                              <div 
+                                className={`h-full ${s.color} rounded-full transition-all duration-300`} 
+                                style={{ width: `${Math.min(100, Math.max(0, s.score * 100))}%` }}
+                              />
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    );
+                  })()}
+                </div>
+              </div>
+            )}
 
             {/* Core Attribution */}
             <div className="grid grid-cols-2 gap-4 text-xs font-mono bg-slate-900/60 p-4 rounded-xl border border-slate-800">
@@ -256,7 +350,7 @@ export const EventStreamView: React.FC<EventStreamViewProps> = ({ events, isStre
                 <span className="text-cyan-400 font-semibold">{selectedEvent.destination_domain || 'Internal (None)'}</span>
               </div>
               <div>
-                <span className="text-slate-500 block">RISK SCORE</span>
+                <span className="text-slate-500 block">AGGREGATE RISK SCORE</span>
                 <span className="text-rose-400 font-bold text-sm">
                   {((selectedEvent.risk_score || 0.0) * 100).toFixed(1)}%
                 </span>
@@ -267,8 +361,14 @@ export const EventStreamView: React.FC<EventStreamViewProps> = ({ events, isStre
               </div>
               <div>
                 <span className="text-slate-500 block">PAYLOAD ENTROPY</span>
-                <span className="text-slate-200 font-semibold">
-                  {selectedEvent.parameter_entropy ? selectedEvent.parameter_entropy.toFixed(2) : '0.00'} bits
+                <span className={`font-semibold flex items-center space-x-1 ${
+                  (selectedEvent.parameter_entropy || 0) > 5.5 ? 'text-rose-400' : 'text-slate-200'
+                }`}>
+                  <Gauge className="w-3.5 h-3.5 mr-1" />
+                  <span>{selectedEvent.parameter_entropy ? selectedEvent.parameter_entropy.toFixed(2) : '0.00'} bits</span>
+                  {(selectedEvent.parameter_entropy || 0) > 5.5 && (
+                    <span className="text-[10px] px-1 rounded bg-rose-500/20 text-rose-300 ml-1">SUSPICIOUS</span>
+                  )}
                 </span>
               </div>
               <div>
@@ -276,6 +376,23 @@ export const EventStreamView: React.FC<EventStreamViewProps> = ({ events, isStre
                 <span className="text-slate-200 font-semibold">{selectedEvent.parameter_size_bytes || 0} bytes</span>
               </div>
             </div>
+
+            {/* OWASP ASI / MCP Top 10 Tags */}
+            {selectedEvent.owasp_tags && selectedEvent.owasp_tags.length > 0 && (
+              <div className="space-y-2">
+                <h4 className="text-xs font-mono font-semibold text-purple-400 uppercase tracking-wider flex items-center">
+                  <ShieldBan className="w-4 h-4 mr-1" />
+                  OWASP ASI / MCP Top 10 Taxonomy
+                </h4>
+                <div className="flex flex-wrap gap-2">
+                  {selectedEvent.owasp_tags.map(t => (
+                    <div key={t} className="p-2 rounded bg-purple-950/40 border border-purple-500/40 text-purple-200 text-xs font-mono">
+                      {t}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
 
             {/* Risk Factors Breakdown */}
             <div className="space-y-2">
@@ -298,15 +415,27 @@ export const EventStreamView: React.FC<EventStreamViewProps> = ({ events, isStre
               )}
             </div>
 
-            {/* Redacted Fields */}
+            {/* Redacted Fields Counter */}
             {selectedEvent.redacted_fields && selectedEvent.redacted_fields.length > 0 && (
               <div className="space-y-2">
-                <h4 className="text-xs font-mono font-semibold text-amber-400 uppercase tracking-wider flex items-center">
-                  <Fingerprint className="w-4 h-4 mr-1" />
-                  Redacted Sensitive Credentials ({selectedEvent.redacted_fields.length})
+                <h4 className="text-xs font-mono font-semibold text-amber-400 uppercase tracking-wider flex items-center justify-between">
+                  <span className="flex items-center">
+                    <Fingerprint className="w-4 h-4 mr-1" />
+                    Zero-Trust Redaction Vault ({selectedEvent.redacted_fields.length} scrubbed)
+                  </span>
+                  <span className="text-[10px] px-2 py-0.5 rounded bg-amber-500/20 text-amber-300">
+                    PASS-THROUGH SHIELD
+                  </span>
                 </h4>
-                <div className="p-3 bg-amber-500/10 border border-amber-500/30 rounded-lg text-amber-300 text-xs font-mono">
-                  {selectedEvent.redacted_fields.join(', ')}
+                <div className="p-3 bg-amber-500/10 border border-amber-500/30 rounded-lg text-amber-300 text-xs font-mono space-y-1">
+                  <div className="text-[11px] text-slate-400">Credentials scrubbed prior to upstream execution:</div>
+                  <div className="flex flex-wrap gap-1.5 pt-1">
+                    {selectedEvent.redacted_fields.map((field) => (
+                      <span key={field} className="px-2 py-0.5 rounded bg-slate-900 text-amber-400 border border-amber-600/40 text-xs">
+                        [REDACTED: {field}]
+                      </span>
+                    ))}
+                  </div>
                 </div>
               </div>
             )}

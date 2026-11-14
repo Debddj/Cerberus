@@ -58,8 +58,8 @@ async def test_audit_logger_hash_chain_and_encryption(tmp_path):
     # Verification must flag tampering
     is_tampered, _, err_msg = AuditLogger.verify_ledger(tampered_log, encryption_key=key)
     assert is_tampered is False
-    assert err_msg is not None
-    assert "tampering" in err_msg.lower() or "broken" in err_msg.lower()
+    assert isinstance(err_msg, str)
+    assert "tampering" in (err_msg or "").lower() or "broken" in (err_msg or "").lower()
 
 
 def test_bug3_encryption_fails_open_with_invalid_key(tmp_path):
@@ -157,8 +157,8 @@ def test_bug7_hmac_prevents_forgery(tmp_path):
     # Must fail because HMAC signature is missing/invalid
     valid, _, err = AuditLogger.verify_ledger(log_file, hmac_key=hmac_key)
     assert valid is False
-    assert err is not None
-    assert "tampering" in err.lower()
+    assert isinstance(err, str)
+    assert "tampering" in (err or "").lower()
 
 
 def test_bug8_verifier_safe_error_messages(tmp_path):
@@ -173,8 +173,8 @@ def test_bug8_verifier_safe_error_messages(tmp_path):
 
     valid, _count, err = AuditLogger.verify_ledger(log_file, encryption_key=None)
     assert valid is False
-    assert err is not None
-    assert "encrypted" in err.lower()
+    assert isinstance(err, str)
+    assert "encrypted" in (err or "").lower()
 
     # Case 2: Missing prev_hash field
     rec_bad = {"index": 0, "hash": "abc", "event": {}}
@@ -183,8 +183,8 @@ def test_bug8_verifier_safe_error_messages(tmp_path):
 
     valid, _count, err = AuditLogger.verify_ledger(log_file)
     assert valid is False
-    assert err is not None
-    assert "missing or invalid 'prev_hash'" in err.lower()
+    assert isinstance(err, str)
+    assert "missing or invalid 'prev_hash'" in (err or "").lower()
 
 
 @pytest.mark.asyncio
