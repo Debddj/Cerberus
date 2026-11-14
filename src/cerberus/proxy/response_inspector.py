@@ -235,6 +235,27 @@ class ResponseInspectionResult:
         """Alias for sanitized_content for compatibility."""
         return self.sanitized_content
 
+    @property
+    def sanitized(self) -> bool:
+        """Alias indicating whether the payload was modified / redacted."""
+        return self.was_redacted
+
+    @property
+    def reason(self) -> str:
+        """Human-readable diagnostic reason for inspection result."""
+        if self.detected_patterns:
+            return f"Prompt injection detected: {', '.join(self.detected_patterns)}"
+        if not self.is_safe:
+            return "Malicious response payload intercepted"
+        return "Clean payload"
+
+    @property
+    def adjudicator_verdict(self) -> str | None:
+        """Decision string from async LLM adjudicator, if evaluated."""
+        if self.adjudication is not None:
+            return self.adjudication.decision.value
+        return None
+
 
 # ── LLM Adjudicator Interface & Implementations ─────────────────────────────
 

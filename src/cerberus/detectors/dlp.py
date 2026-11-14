@@ -500,6 +500,11 @@ class QuotaTracker:
         self._agent_records: dict[str, list[EgressRecord]] = {}
         self._session_records: dict[str, list[EgressRecord]] = {}
 
+    @property
+    def _agent_egress(self) -> dict[str, list[EgressRecord]]:
+        """Alias for _agent_records for backwards compatibility."""
+        return self._agent_records
+
     def _prune(self, records: list[EgressRecord], now: float) -> list[EgressRecord]:
         """Prune records older than the maximum window duration."""
         cutoff = now - self.config.window_seconds

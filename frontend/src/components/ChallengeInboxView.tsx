@@ -1,11 +1,11 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { 
-  CheckSquare, 
-  CheckCircle, 
-  XCircle, 
-  Clock, 
-  AlertTriangle, 
-  Search, 
+import {
+  CheckSquare,
+  CheckCircle,
+  XCircle,
+  Clock,
+  AlertTriangle,
+  Search,
   Code,
   RefreshCw,
   Lock,
@@ -119,21 +119,19 @@ export const ChallengeInboxView: React.FC = () => {
         <div className="flex items-center space-x-2">
           <button
             onClick={() => setFilterTab('pending')}
-            className={`px-3 py-1.5 rounded-lg text-xs font-mono font-semibold transition-colors ${
-              filterTab === 'pending'
+            className={`px-3 py-1.5 rounded-lg text-xs font-mono font-semibold transition-colors ${filterTab === 'pending'
                 ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40'
                 : 'text-slate-400 hover:text-white'
-            }`}
+              }`}
           >
             Pending Actions ({pendingCount})
           </button>
           <button
             onClick={() => setFilterTab('resolved')}
-            className={`px-3 py-1.5 rounded-lg text-xs font-mono font-semibold transition-colors ${
-              filterTab === 'resolved'
+            className={`px-3 py-1.5 rounded-lg text-xs font-mono font-semibold transition-colors ${filterTab === 'resolved'
                 ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/40'
                 : 'text-slate-400 hover:text-white'
-            }`}
+              }`}
           >
             Resolved History ({challenges.length - pendingCount})
           </button>
@@ -165,7 +163,7 @@ export const ChallengeInboxView: React.FC = () => {
             const isPending = item.status === 'pending';
 
             return (
-              <div 
+              <div
                 key={item.challenge_id}
                 className="p-5 rounded-xl bg-soc-panel border border-soc-border hover:border-slate-600 transition-all space-y-4"
               >
@@ -207,11 +205,10 @@ export const ChallengeInboxView: React.FC = () => {
                         <span>Expires in {timeLeft}s</span>
                       </div>
                     ) : (
-                      <span className={`px-2.5 py-1 rounded text-xs font-mono font-bold uppercase border ${
-                        item.status === 'approved' 
-                          ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30' 
+                      <span className={`px-2.5 py-1 rounded text-xs font-mono font-bold uppercase border ${item.status === 'approved'
+                          ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30'
                           : 'bg-rose-500/10 text-rose-400 border-rose-500/30'
-                      }`}>
+                        }`}>
                         {item.status}
                       </span>
                     )}

@@ -29,6 +29,11 @@ class ScopeAnalyzer:
         self.agent_scopes: dict[str, set[str]] = {}
         self.agent_enforced: dict[str, bool] = {}
 
+    @property
+    def known_scopes(self) -> dict[str, set[str]]:
+        """Compatibility property returning registered agent scopes."""
+        return self.agent_scopes
+
     def register_scope(self, agent_id: str, allowed_tools: set[str], enforced: bool = True):
         """Register an agent's allowed tool scope."""
         self.agent_scopes[agent_id] = set(allowed_tools)

@@ -1,17 +1,17 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { 
-  Grid, 
-  ShieldCheck, 
-  AlertTriangle, 
-  Lock, 
-  Eye, 
-  Layers, 
-  Fingerprint, 
-  Server, 
-  Terminal, 
-  FileCode, 
-  RefreshCw, 
-  Check, 
+import {
+  Grid,
+  ShieldCheck,
+  AlertTriangle,
+  Lock,
+  Eye,
+  Layers,
+  Fingerprint,
+  Server,
+  Terminal,
+  FileCode,
+  RefreshCw,
+  Check,
   X,
   FileDiff,
   Key,
@@ -24,16 +24,16 @@ import {
   Binary,
   ShieldAlert
 } from 'lucide-react';
-import { 
-  ScannerSummary, 
-  SchemaPin, 
-  CanaryTokenRecord, 
-  CanaryAlert, 
-  DLPQuotaSummary, 
-  DLPAlert, 
-  ResponseInspectionSummary 
+import {
+  ScannerSummary,
+  SchemaPin,
+  CanaryTokenRecord,
+  CanaryAlert,
+  DLPQuotaSummary,
+  DLPAlert,
+  ResponseInspectionSummary
 } from '../types';
-import { 
+import {
   fetchScannersSummary,
   fetchCanaryTokens,
   generateCanaryToken,
@@ -128,7 +128,7 @@ export const SecurityMatrixView: React.FC = () => {
   // Derive unique tools across all agents for the Scope Matrix
   const { agents, allTools } = React.useMemo(() => {
     if (!data?.scope_matrix) {
-      return { 
+      return {
         agents: ['data-agent-1', 'researcher-agent', 'code-review-agent', 'devops-bot'],
         allTools: ['read_file', 'query_db', 'http_request', 'execute_command', 'git_commit']
       };
@@ -176,49 +176,43 @@ export const SecurityMatrixView: React.FC = () => {
       <div className="flex space-x-2 border-b border-slate-800 pb-2 overflow-x-auto font-mono text-xs">
         <button
           onClick={() => setActiveTab('matrix')}
-          className={`px-3 py-1.5 rounded-lg transition-colors whitespace-nowrap ${
-            activeTab === 'matrix' ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 font-semibold' : 'text-slate-400 hover:text-white'
-          }`}
+          className={`px-3 py-1.5 rounded-lg transition-colors whitespace-nowrap ${activeTab === 'matrix' ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 font-semibold' : 'text-slate-400 hover:text-white'
+            }`}
         >
           Scope Analyzer Matrix
         </button>
         <button
           onClick={() => setActiveTab('schemas')}
-          className={`px-3 py-1.5 rounded-lg transition-colors whitespace-nowrap ${
-            activeTab === 'schemas' ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 font-semibold' : 'text-slate-400 hover:text-white'
-          }`}
+          className={`px-3 py-1.5 rounded-lg transition-colors whitespace-nowrap ${activeTab === 'schemas' ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 font-semibold' : 'text-slate-400 hover:text-white'
+            }`}
         >
           Schema Pins &amp; Rug-Pull Diffs ({data?.schema_pins?.length ?? 0})
         </button>
         <button
           onClick={() => setActiveTab('shadow')}
-          className={`px-3 py-1.5 rounded-lg transition-colors whitespace-nowrap ${
-            activeTab === 'shadow' ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 font-semibold' : 'text-slate-400 hover:text-white'
-          }`}
+          className={`px-3 py-1.5 rounded-lg transition-colors whitespace-nowrap ${activeTab === 'shadow' ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 font-semibold' : 'text-slate-400 hover:text-white'
+            }`}
         >
           Shadow Tool Alerts ({Object.keys(data?.shadow_registry ?? {}).length})
         </button>
         <button
           onClick={() => setActiveTab('redactions')}
-          className={`px-3 py-1.5 rounded-lg transition-colors whitespace-nowrap ${
-            activeTab === 'redactions' ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 font-semibold' : 'text-slate-400 hover:text-white'
-          }`}
+          className={`px-3 py-1.5 rounded-lg transition-colors whitespace-nowrap ${activeTab === 'redactions' ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 font-semibold' : 'text-slate-400 hover:text-white'
+            }`}
         >
           Redaction Vault Counters
         </button>
         <button
           onClick={() => setActiveTab('owasp')}
-          className={`px-3 py-1.5 rounded-lg transition-colors whitespace-nowrap ${
-            activeTab === 'owasp' ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 font-semibold' : 'text-slate-400 hover:text-white'
-          }`}
+          className={`px-3 py-1.5 rounded-lg transition-colors whitespace-nowrap ${activeTab === 'owasp' ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 font-semibold' : 'text-slate-400 hover:text-white'
+            }`}
         >
           OWASP ASI / MCP Top 10 Heatmap
         </button>
         <button
           onClick={() => setActiveTab('canary')}
-          className={`px-3 py-1.5 rounded-lg transition-colors whitespace-nowrap flex items-center space-x-1.5 ${
-            activeTab === 'canary' ? 'bg-purple-500/20 text-purple-300 border border-purple-500/40 font-semibold' : 'text-slate-400 hover:text-white'
-          }`}
+          className={`px-3 py-1.5 rounded-lg transition-colors whitespace-nowrap flex items-center space-x-1.5 ${activeTab === 'canary' ? 'bg-purple-500/20 text-purple-300 border border-purple-500/40 font-semibold' : 'text-slate-400 hover:text-white'
+            }`}
         >
           <Key className="w-3.5 h-3.5" />
           <span>Canary Vault ({canaryTokens.length})</span>
@@ -228,18 +222,16 @@ export const SecurityMatrixView: React.FC = () => {
         </button>
         <button
           onClick={() => setActiveTab('dlp')}
-          className={`px-3 py-1.5 rounded-lg transition-colors whitespace-nowrap flex items-center space-x-1.5 ${
-            activeTab === 'dlp' ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 font-semibold' : 'text-slate-400 hover:text-white'
-          }`}
+          className={`px-3 py-1.5 rounded-lg transition-colors whitespace-nowrap flex items-center space-x-1.5 ${activeTab === 'dlp' ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 font-semibold' : 'text-slate-400 hover:text-white'
+            }`}
         >
           <Radio className="w-3.5 h-3.5" />
           <span>Egress DLP &amp; Quotas</span>
         </button>
         <button
           onClick={() => setActiveTab('response')}
-          className={`px-3 py-1.5 rounded-lg transition-colors whitespace-nowrap flex items-center space-x-1.5 ${
-            activeTab === 'response' ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 font-semibold' : 'text-slate-400 hover:text-white'
-          }`}
+          className={`px-3 py-1.5 rounded-lg transition-colors whitespace-nowrap flex items-center space-x-1.5 ${activeTab === 'response' ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 font-semibold' : 'text-slate-400 hover:text-white'
+            }`}
         >
           <ShieldAlert className="w-3.5 h-3.5" />
           <span>Response Shield</span>
@@ -622,9 +614,9 @@ export const SecurityMatrixView: React.FC = () => {
                         <span className={usedPct > 80 ? 'text-rose-400 font-bold' : 'text-slate-400'}>{usedPct.toFixed(1)}%</span>
                       </div>
                       <div className="w-full h-2 rounded-full bg-slate-800 overflow-hidden">
-                        <div 
-                          className={`h-full ${barColor} transition-all duration-500`} 
-                          style={{ width: `${Math.min(100, usedPct)}%` }} 
+                        <div
+                          className={`h-full ${barColor} transition-all duration-500`}
+                          style={{ width: `${Math.min(100, usedPct)}%` }}
                         />
                       </div>
                     </div>
@@ -742,7 +734,7 @@ export const SecurityMatrixView: React.FC = () => {
                       </span>
                       {v.adjudicated && (
                         <span className="px-2 py-0.5 rounded bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 text-[10px]">
-                          ADJUDICATOR: {v.adjudicator_verdict} ({( (v.confidence || 0.95) * 100).toFixed(0)}%)
+                          ADJUDICATOR: {v.adjudicator_verdict} ({((v.confidence || 0.95) * 100).toFixed(0)}%)
                         </span>
                       )}
                     </div>
@@ -854,7 +846,7 @@ export const SecurityMatrixView: React.FC = () => {
                   Rug-Pull Inspection: {selectedPinForDiff.tool_name}
                 </h3>
               </div>
-              <button 
+              <button
                 onClick={() => setSelectedPinForDiff(null)}
                 className="p-1 rounded text-slate-400 hover:text-white"
               >

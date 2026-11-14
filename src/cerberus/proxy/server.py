@@ -407,9 +407,7 @@ class CerberusProxyEngine:
         duration_scaled = math.log10(
             min(max(0.0, float(session_duration_ms or 0.0)) / 1000.0, 86400.0) + 1.0
         )
-        seq_pos_scaled = math.log2(
-            min(max(0, int(seq_pos if seq_pos is not None else 0)), 1000) + 1
-        )
+        seq_pos_scaled = math.log2(min(max(0, seq_pos), 1000) + 1)
 
         z_stats = {
             k: self.running_scaler.get_mean_std(k)
@@ -1005,7 +1003,7 @@ async def api_scanners_summary():
             logger.debug(f"Error reading schema pins: {e}")
 
     known_scopes = {
-        agent: sorted(tools) for agent, tools in engine.scope_analyzer.known_scopes.items()
+        agent: sorted(tools) for agent, tools in engine.scope_analyzer.agent_scopes.items()
     }
     shadow_registry = dict(engine.shadow_detector.known_registry)
     redactions = dict(engine.redaction_counter)
@@ -1232,7 +1230,7 @@ async def api_dlp_quotas():
     now = time.time()
     agent_usages = {}
     with engine.dlp_detector.quota_tracker._lock:
-        for aid in list(engine.dlp_detector.quota_tracker._agent_egress.keys()):
+        for aid in list(engine.dlp_detector.quota_tracker._agent_records.keys()):
             agent_usages[aid] = engine.dlp_detector.quota_tracker.get_agent_usage(
                 aid, timestamp=now
             )
@@ -1262,15 +1260,16 @@ async def api_response_inspector_summary():
         viols = engine.response_inspector.get_session_violations(sid)
         total_violations += len(viols)
         for v in viols[-5:]:
+            adj_verdict = v.adjudication.decision.value if v.adjudication else None
             recent_violations.append(
                 {
                     "session_id": sid,
                     "risk_score": v.risk_score,
                     "reason": v.reason,
-                    "sanitized": v.sanitized,
+                    "sanitized": v.was_redacted,
                     "match_count": len(v.matches),
-                    "adjudicated": v.adjudicator_verdict is not None,
-                    "adjudicator_verdict": v.adjudicator_verdict,
+                    "adjudicated": v.adjudication is not None,
+                    "adjudicator_verdict": adj_verdict,
                 }
             )
     return {
