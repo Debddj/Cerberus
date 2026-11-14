@@ -120,7 +120,7 @@ class StepUpTokenManager:
         challenge_id: str,
         operator_id: str = "operator",
         action: str = "approve",
-        ttl_seconds: int = 300,
+        ttl_seconds: float = 300,
     ) -> str:
         """Issue an HMAC-signed step-up approval token cryptographically bound to a challenge."""
         now = int(time.time())
@@ -504,7 +504,7 @@ class ChallengeManager:
         self,
         challenge_id: str,
         action: str = "approve",
-        ttl_seconds: float = 300.0,
+        ttl_seconds: float = 300,
     ) -> str:
         """Issue an HMAC-signed step-up token for authorizing a challenge."""
         return self.token_manager.issue_token(
