@@ -1125,6 +1125,162 @@ async def api_benchmarks():
     }
 
 
+# ── Industry-Grade Security Endpoints (Taint, Canary, DLP, Response) ────────
+
+
+@app.get("/api/canary/tokens")
+async def api_list_canary_tokens():
+    """List active honeytokens and decoy credentials."""
+    tokens = engine.canary_detector.registry.list_tokens()
+    return [
+        {
+            "token": t.mask_token(),
+            "raw_token": t.token,
+            "token_type": t.token_type.value,
+            "created_at": t.created_at.isoformat(),
+            "description": t.description,
+            "metadata": t.metadata,
+        }
+        for t in tokens
+    ]
+
+
+@app.post("/api/canary/generate")
+async def api_generate_canary_token(payload: dict[str, Any] = Body(...)):  # noqa: B008
+    """Generate and deploy a new canary honeytoken."""
+    token_type = str(payload.get("type", "api_key")).lower()
+    description = str(payload.get("description", "Operator planted honeytoken"))
+    if token_type == "aws":
+        ak, sk = engine.canary_detector.create_canary_aws(label=description)
+        return {
+            "token_type": "aws",
+            "access_key_id": ak.token,
+            "secret_access_key": sk.token,
+            "masked_key": ak.mask_token(),
+            "description": description,
+        }
+    elif token_type == "env":
+        env_bundle = engine.canary_detector.create_canary_env(label=description)
+        return {
+            "token_type": "env",
+            "tokens": [t.token for t in env_bundle.tokens],
+            "env_content": env_bundle.content,
+            "description": description,
+        }
+    elif token_type == "db":
+        table = str(payload.get("table_name", "users"))
+        db_bundle = engine.canary_detector.create_canary_db_row(table_name=table, label=description)
+        return {
+            "token_type": "db_row",
+            "tokens": [t.token for t in db_bundle.tokens],
+            "sql_insert": db_bundle.sql_insert,
+            "table_name": table,
+            "description": description,
+        }
+    else:
+        prefix = str(payload.get("prefix", "sk-prod-"))
+        canary = engine.canary_detector.create_canary_api_key(prefix=prefix, label=description)
+        return {
+            "token_type": "api_key",
+            "token": canary.token,
+            "masked": canary.mask_token(),
+            "description": description,
+        }
+
+
+@app.get("/api/canary/alerts")
+async def api_canary_alerts():
+    """Retrieve tripwire alerts from honeytoken compromises."""
+    return engine.canary_detector.get_tamper_alerts()
+
+
+@app.get("/api/taint/provenance")
+async def api_taint_provenance(session_id: str | None = None):
+    """Retrieve data provenance nodes and lineage history."""
+    if session_id:
+        nodes = engine.taint_tracker.get_provenance_history(session_id)
+    else:
+        nodes = []
+        with engine.taint_tracker._lock:
+            for state in engine.taint_tracker._sessions.values():
+                nodes.extend(state.provenance_nodes)
+    return [
+        {
+            "step": n.step,
+            "session_id": n.session_id,
+            "tool_name": n.tool_name,
+            "tool_server": n.tool_server,
+            "action": n.action,
+            "timestamp": n.timestamp.isoformat(),
+            "matched_tag_ids": n.matched_tag_ids,
+            "matched_parameters": n.matched_parameters,
+            "details": n.details,
+        }
+        for n in nodes[-100:]
+    ]
+
+
+@app.get("/api/taint/alerts")
+async def api_taint_alerts():
+    """Retrieve taint exfiltration alerts."""
+    return engine.taint_tracker.get_alerts()
+
+
+@app.get("/api/dlp/quotas")
+async def api_dlp_quotas():
+    """Retrieve sliding-window egress byte quotas and destination rates."""
+    now = time.time()
+    agent_usages = {}
+    with engine.dlp_detector.quota_tracker._lock:
+        for aid in list(engine.dlp_detector.quota_tracker._agent_egress.keys()):
+            agent_usages[aid] = engine.dlp_detector.quota_tracker.get_agent_usage(
+                aid, timestamp=now
+            )
+    return {
+        "max_bytes_per_window": engine.dlp_detector.quota_tracker.config.max_bytes_per_window,
+        "window_seconds": engine.dlp_detector.quota_tracker.config.window_seconds,
+        "max_destinations_per_window": (
+            engine.dlp_detector.quota_tracker.config.max_destinations_per_window
+        ),
+        "agents": agent_usages,
+    }
+
+
+@app.get("/api/dlp/alerts")
+async def api_dlp_alerts():
+    """Retrieve DLP sensitive data findings and quota exhaustion alerts."""
+    return engine.dlp_detector.get_alerts()
+
+
+@app.get("/api/response-inspector/summary")
+async def api_response_inspector_summary():
+    """Retrieve response-side prompt injection stats and flagged sessions."""
+    flagged = list(engine.response_inspector.flagged_sessions)
+    total_violations = 0
+    recent_violations = []
+    for sid in flagged:
+        viols = engine.response_inspector.get_session_violations(sid)
+        total_violations += len(viols)
+        for v in viols[-5:]:
+            recent_violations.append(
+                {
+                    "session_id": sid,
+                    "risk_score": v.risk_score,
+                    "reason": v.reason,
+                    "sanitized": v.sanitized,
+                    "match_count": len(v.matches),
+                    "adjudicated": v.adjudicator_verdict is not None,
+                    "adjudicator_verdict": v.adjudicator_verdict,
+                }
+            )
+    return {
+        "flagged_sessions_count": len(flagged),
+        "flagged_sessions": flagged,
+        "total_violations": total_violations,
+        "recent_violations": recent_violations,
+    }
+
+
 # ── Existing Operational Endpoints ──────────────────────────────────────────
 
 

@@ -120,6 +120,9 @@ export interface ChallengeItem {
   risk_factors: string[];
   timestamp: number;
   expires_at: number;
+  timeout_seconds?: number;
+  step_up_token?: string;
+  webhook_dispatched?: boolean;
   status: 'pending' | 'approved' | 'rejected' | 'expired';
   parameters?: Record<string, any>;
   resolved_by?: string;
@@ -177,4 +180,107 @@ export interface BenchmarkResults {
     ci_95: string;
     sample_size: string;
   }[];
+}
+
+// ── Industry-Grade Security Feature Interfaces ──────────────────────────────
+
+export interface TaintProvenanceNode {
+  step: number;
+  session_id: string;
+  tool_name: string;
+  tool_server: string;
+  action: 'source' | 'propagated' | 'egress_blocked' | 'sink' | string;
+  timestamp: string;
+  matched_tag_ids: string[];
+  matched_parameters: string[];
+  details?: string;
+}
+
+export interface TaintAlert {
+  timestamp: string;
+  session_id: string;
+  agent_id: string;
+  tool_name: string;
+  reason: string;
+  alert_type: string;
+  factors: string[];
+}
+
+export interface CanaryTokenRecord {
+  token: string;
+  raw_token?: string;
+  token_type: string;
+  created_at: string;
+  description: string;
+  metadata?: Record<string, any>;
+  status?: 'ARMED' | 'TRIPPED';
+}
+
+export interface CanaryAlert {
+  timestamp: string;
+  alert_type: string;
+  session_id: string;
+  agent_id: string;
+  tool_name: string;
+  destination?: string;
+  token_type: string;
+  matched_token: string;
+  location?: string;
+  snippet?: string;
+}
+
+export interface DLPQuotaUsage {
+  agent_id: string;
+  current_window_bytes: number;
+  max_bytes: number;
+  bytes_used_pct: number;
+  unique_destinations_count: number;
+  max_destinations: number;
+  destinations: string[];
+  window_seconds: number;
+  window_expires_in_seconds?: number;
+}
+
+export interface DLPQuotaSummary {
+  max_bytes_per_window: number;
+  window_seconds: number;
+  max_destinations_per_window: number;
+  agents: Record<string, DLPQuotaUsage>;
+}
+
+export interface DLPAlert {
+  timestamp: string;
+  alert_type: string;
+  session_id: string;
+  agent_id: string;
+  tool_name: string;
+  findings?: {
+    category: string;
+    snippet: string;
+    path: string;
+  }[];
+  violation_type?: string;
+  bytes_requested?: number;
+  quota_limit?: number;
+  reason?: string;
+}
+
+export interface ResponseViolation {
+  session_id: string;
+  risk_score: number;
+  reason: string;
+  sanitized: boolean;
+  match_count: number;
+  adjudicated: boolean;
+  adjudicator_verdict?: string | null;
+  confidence?: number;
+  original_payload?: string;
+  sanitized_payload?: string;
+}
+
+export interface ResponseInspectionSummary {
+  flagged_sessions_count: number;
+  flagged_sessions: string[];
+  total_violations: number;
+  recent_violations: ResponseViolation[];
 }

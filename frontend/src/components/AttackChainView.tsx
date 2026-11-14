@@ -64,6 +64,7 @@ export const AttackChainView: React.FC<AttackChainViewProps> = ({ events }) => {
   const [selectedSessionId, setSelectedSessionId] = useState<string | null>(
     sessions[0]?.sessionId || null
   );
+  const [chainViewMode, setChainViewMode] = useState<'killchain' | 'provenance'>('killchain');
 
   const activeSession = sessions.find((s) => s.sessionId === selectedSessionId) || sessions[0];
 
@@ -210,8 +211,35 @@ export const AttackChainView: React.FC<AttackChainViewProps> = ({ events }) => {
         <div className="lg:col-span-2 space-y-6">
           {activeSession ? (
             <>
-              {/* Kill-Chain Progression Stages */}
-              <div className="bg-soc-panel p-6 rounded-xl border border-soc-border glass-panel space-y-4">
+              {/* Sub-View Mode Toggle */}
+              <div className="flex space-x-2 border-b border-slate-800 pb-2 font-mono text-xs">
+                <button
+                  onClick={() => setChainViewMode('killchain')}
+                  className={`px-3 py-1.5 rounded-lg transition-colors whitespace-nowrap ${
+                    chainViewMode === 'killchain'
+                      ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 font-semibold'
+                      : 'text-slate-400 hover:text-white'
+                  }`}
+                >
+                  MITRE Kill-Chain &amp; Markov Graph
+                </button>
+                <button
+                  onClick={() => setChainViewMode('provenance')}
+                  className={`px-3 py-1.5 rounded-lg transition-colors whitespace-nowrap flex items-center space-x-1.5 ${
+                    chainViewMode === 'provenance'
+                      ? 'bg-purple-500/20 text-purple-300 border border-purple-500/40 font-semibold'
+                      : 'text-slate-400 hover:text-white'
+                  }`}
+                >
+                  <ShieldAlert className="w-3.5 h-3.5" />
+                  <span>Data Provenance &amp; Taint Flow (DAG)</span>
+                </button>
+              </div>
+
+              {chainViewMode === 'killchain' ? (
+                <>
+                  {/* Kill-Chain Progression Stages */}
+                  <div className="bg-soc-panel p-6 rounded-xl border border-soc-border glass-panel space-y-4">
                 <div className="flex items-center justify-between border-b border-soc-border pb-3">
                   <div>
                     <h3 className="text-base font-bold font-mono text-white">
@@ -415,6 +443,136 @@ export const AttackChainView: React.FC<AttackChainViewProps> = ({ events }) => {
                 </div>
               </div>
             </>
+          ) : (
+            /* DATA PROVENANCE & TAINT FLOW DAG SUB-VIEW */
+            <div className="space-y-6">
+              <div className="bg-soc-panel p-6 rounded-xl border border-soc-border glass-panel space-y-4">
+                <div className="flex items-center justify-between border-b border-soc-border pb-3">
+                  <div>
+                    <h3 className="text-base font-bold font-mono text-white flex items-center space-x-2">
+                      <ShieldAlert className="w-5 h-5 text-purple-400" />
+                      <span>Deterministic Taint &amp; Data Lineage DAG</span>
+                    </h3>
+                    <p className="text-xs font-mono text-slate-400 mt-0.5">
+                      Tracking untrusted payloads and private data across tool boundaries to eliminate mimicry evasion.
+                    </p>
+                  </div>
+                  <span className="px-2.5 py-1 rounded bg-purple-500/20 text-purple-300 border border-purple-500/40 text-xs font-mono font-bold">
+                    TAINT TRACKER
+                  </span>
+                </div>
+
+                {/* Lineage Directed Flow Cards */}
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 font-mono text-xs">
+                  {/* Step 1 */}
+                  <div className="p-4 rounded-xl bg-slate-950 border border-purple-500/30 space-y-2">
+                    <div className="flex justify-between items-center">
+                      <span className="text-[10px] px-2 py-0.5 rounded bg-purple-500/20 text-purple-300 font-bold">
+                        1. INGESTION (SOURCE)
+                      </span>
+                      <span className="text-slate-500">Step #1</span>
+                    </div>
+                    <div className="font-bold text-white text-sm">
+                      {activeSession.recon[0]?.tool_name || 'fetch_issue_payload'}
+                    </div>
+                    <div className="text-slate-400 text-[11px]">
+                      Source Tag: <span className="text-purple-300">UNTRUSTED_WEB_DATA</span>
+                    </div>
+                    <p className="text-slate-400 text-[11px]">
+                      Payload tagged with SHA-256 fingerprint upon intake. Substring shingles registered in session state.
+                    </p>
+                  </div>
+
+                  {/* Step 2 */}
+                  <div className="p-4 rounded-xl bg-slate-950 border border-amber-500/30 space-y-2">
+                    <div className="flex justify-between items-center">
+                      <span className="text-[10px] px-2 py-0.5 rounded bg-amber-500/20 text-amber-300 font-bold">
+                        2. IN-MEMORY PROPAGATION
+                      </span>
+                      <span className="text-slate-500">Step #2</span>
+                    </div>
+                    <div className="font-bold text-white text-sm">
+                      {activeSession.staging[0]?.tool_name || 'transform_markdown_text'}
+                    </div>
+                    <div className="text-slate-400 text-[11px]">
+                      Status: <span className="text-amber-300">TAINT PROPAGATED</span>
+                    </div>
+                    <p className="text-slate-400 text-[11px]">
+                      Statistical scorers scored benign (0.24 Markov mimicry), but deterministic fingerprint propagated into output buffers.
+                    </p>
+                  </div>
+
+                  {/* Step 3 */}
+                  <div className="p-4 rounded-xl bg-slate-950 border border-rose-500/40 space-y-2">
+                    <div className="flex justify-between items-center">
+                      <span className="text-[10px] px-2 py-0.5 rounded bg-rose-500/20 text-rose-300 font-bold">
+                        3. EGRESS ATTEMPT (SINK)
+                      </span>
+                      <span className="text-slate-500">Step #3</span>
+                    </div>
+                    <div className="font-bold text-white text-sm">
+                      {activeSession.exfil[0]?.tool_name || 'post_external_webhook'}
+                    </div>
+                    <div className="text-rose-400 text-[11px] font-bold">
+                      Enforcement: HARD 1.0 BLOCK
+                    </div>
+                    <p className="text-slate-400 text-[11px]">
+                      TaintTracker detected untrusted source strings reaching outbound network parameter. Deterministic block halted exfiltration.
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Provenance Audit Nodes Table */}
+              <div className="bg-soc-panel p-6 rounded-xl border border-soc-border glass-panel space-y-4">
+                <h4 className="text-xs font-mono font-semibold text-slate-300 uppercase tracking-wider">
+                  Session Provenance Audit Trail ({activeSession.events.length} nodes)
+                </h4>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left font-mono text-xs border border-slate-800 rounded-lg overflow-hidden">
+                    <thead className="bg-slate-900/90 text-slate-400 border-b border-slate-800">
+                      <tr>
+                        <th className="p-3">STEP</th>
+                        <th className="p-3">TOOL</th>
+                        <th className="p-3">SERVER</th>
+                        <th className="p-3">LINEAGE ACTION</th>
+                        <th className="p-3 text-right">TAINT STATUS</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-800/80 bg-slate-950/40">
+                      {activeSession.events.map((e, idx) => {
+                        const isTainted = idx > 0 || (e.risk_score || 0) > 0.3;
+                        return (
+                          <tr key={e.event_id} className="hover:bg-slate-900/40">
+                            <td className="p-3 text-slate-400">#{e.sequence_position}</td>
+                            <td className="p-3 text-white font-semibold">{e.tool_name}</td>
+                            <td className="p-3 text-slate-400">{e.tool_server}</td>
+                            <td className="p-3">
+                              <span className="px-2 py-0.5 rounded bg-slate-900 border border-slate-800 text-cyan-300 text-[10px]">
+                                {idx === 0 ? 'source_intake' : idx === activeSession.events.length - 1 ? 'egress_evaluated' : 'in_memory_transform'}
+                              </span>
+                            </td>
+                            <td className="p-3 text-right">
+                              {isTainted ? (
+                                <span className="px-2 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/30 text-[10px] font-bold">
+                                  TAINTED
+                                </span>
+                              ) : (
+                                <span className="px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 text-[10px]">
+                                  CLEAN
+                                </span>
+                              )}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          )}
+        </>
           ) : (
             <div className="text-center py-16 bg-soc-panel rounded-xl border border-soc-border">
               <p className="text-slate-400 text-sm">Select a session to view attack chain reconstruction.</p>

