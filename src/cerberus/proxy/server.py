@@ -28,9 +28,19 @@ from cerberus.behavioral.scorers.rule_based import RuleBasedScorer
 from cerberus.behavioral.scorers.transformer import SequenceTransformerScorer
 from cerberus.behavioral.window import SessionWindowManager
 from cerberus.config import settings
+from cerberus.detectors.canary import CanaryDetector
+from cerberus.detectors.dlp import EgressDLPDetector
+from cerberus.detectors.taint import TaintTracker
 from cerberus.policy.enforcer import EnforcementPipeline
 from cerberus.policy.synthesizer import PolicySynthesizer
 from cerberus.proxy.auth import HMACAuthenticator, TenantRateLimiter
+from cerberus.proxy.challenge_manager import (
+    ChallengeExpiredError,
+    ChallengeManager,
+    ChallengeNotFoundError,
+    InvalidChallengeStateError,
+    StepUpAuthError,
+)
 from cerberus.proxy.forwarder import UpstreamMCPForwarder
 from cerberus.proxy.logger import AuditLogger
 from cerberus.proxy.metrics import (
@@ -41,6 +51,7 @@ from cerberus.proxy.metrics import (
 )
 from cerberus.proxy.models import EventDecision, ToolCallEvent
 from cerberus.proxy.redactor import SecretRedactor
+from cerberus.proxy.response_inspector import ResponseInspectionResult, ResponseInspector
 from cerberus.scanner.schema_pinner import SchemaPinner
 from cerberus.scanner.scope_analyzer import ScopeAnalyzer
 from cerberus.scanner.shadow_detector import ShadowDetector
@@ -69,6 +80,11 @@ class CerberusProxyEngine:
         audit_logger: AuditLogger | None = None,
         baseline_store: BaselineStore | None = None,
         schema_pinner: SchemaPinner | None = None,
+        challenge_manager: ChallengeManager | None = None,
+        canary_detector: CanaryDetector | None = None,
+        taint_tracker: TaintTracker | None = None,
+        dlp_detector: EgressDLPDetector | None = None,
+        response_inspector: ResponseInspector | None = None,
     ):
         self.audit_logger = audit_logger or AuditLogger()
         self.window_mgr = SessionWindowManager(window_size=5)
@@ -87,6 +103,12 @@ class CerberusProxyEngine:
         # BUG-C2/C3 fix: Wire ScopeAnalyzer and ShadowDetector into runtime
         self.scope_analyzer = ScopeAnalyzer(mode=settings.scope_enforcement_mode)
         self.shadow_detector = ShadowDetector()
+
+        # Industry-Grade Detectors & Mitigations
+        self.canary_detector = canary_detector or CanaryDetector()
+        self.taint_tracker = taint_tracker or TaintTracker()
+        self.dlp_detector = dlp_detector or EgressDLPDetector()
+        self.response_inspector = response_inspector or ResponseInspector()
 
         # Pillar 7 & 11: Multi-tenant auth, rate limiting, and storage backend
         self.authenticator = HMACAuthenticator(secret_key=settings.hmac_secret_key)
@@ -120,6 +142,13 @@ class CerberusProxyEngine:
         # BUG-H5 fix: Track active quarantined sessions
         self.quarantined_sessions: set[str] = set()
         self.contaminated_sessions: set[str] = set()
+        self.challenge_manager = challenge_manager or ChallengeManager(
+            webhook_url=getattr(settings, "challenge_webhook_url", None),
+            webhook_secret=getattr(settings, "challenge_webhook_secret", None),
+            webhook_format=getattr(settings, "challenge_webhook_format", "generic"),
+            default_timeout=getattr(settings, "challenge_timeout_seconds", 60.0),
+            bearer_tokens=[settings.admin_api_token] if settings.admin_api_token else [],
+        )
         self.pending_challenges: dict[str, dict[str, Any]] = {}
         self.redaction_counter: dict[str, int] = defaultdict(int)
         self.event_subscribers: set[asyncio.Queue] = set()
@@ -348,6 +377,26 @@ class CerberusProxyEngine:
             )
             self.contaminated_sessions.add(session_id)
 
+        # Industry-Grade Check: Honeytokens & Canary Credentials (ASI10)
+        canary_res = self.canary_detector.scan_event(event, raw_parameters=parameters)
+        if canary_res.detected:
+            self.contaminated_sessions.add(session_id)
+            self.quarantined_sessions.add(session_id)
+
+        # Industry-Grade Check: Deterministic Taint & Provenance Tracking
+        taint_res = self.taint_tracker.check_tool_call(event)
+        if not taint_res.allowed:
+            event.risk_score = max(event.risk_score or 0.0, taint_res.risk_score)
+            event.risk_factors.extend(taint_res.factors)
+            self.contaminated_sessions.add(session_id)
+
+        # Industry-Grade Check: Egress DLP & Quota Budgets
+        dlp_res = self.dlp_detector.evaluate(event)
+        if not dlp_res.allowed:
+            event.risk_score = max(event.risk_score or 0.0, dlp_res.risk_score)
+            event.risk_factors.append(dlp_res.reason)
+            self.contaminated_sessions.add(session_id)
+
         # 3. Behavioral Features & Scaling
         agent_tools = self.tool_counts.setdefault(agent_id, {})
         agent_dests = self.dest_counts.setdefault(agent_id, {})
@@ -438,6 +487,15 @@ class CerberusProxyEngine:
 
         # 5. Policy Enforcement
         decision = await self.enforcer.enforce(event)
+        if canary_res.detected:
+            decision = EventDecision.QUARANTINE
+            event.decision_reason = "ASI10: Canary credential compromise detected"
+        elif not taint_res.allowed:
+            decision = EventDecision.BLOCK
+            event.decision_reason = taint_res.reason
+        elif not dlp_res.allowed:
+            decision = EventDecision.BLOCK
+            event.decision_reason = dlp_res.reason
         event.decision = decision
 
         # Non-circular contamination rule: quarantine any session that produces a non-ALLOW
@@ -453,23 +511,28 @@ class CerberusProxyEngine:
             self.quarantined_sessions.add(session_id)
             ACTIVE_QUARANTINES.set(len(self.quarantined_sessions))
 
-        # Record pending challenge for operator resolution
+        # Human-in-the-loop challenge: dispatch webhook and await operator step-up resolution or timeout
         if decision == EventDecision.CHALLENGE:
-            challenge_id = f"chg_{uuid.uuid4().hex[:12]}"
-            self.pending_challenges[challenge_id] = {
-                "challenge_id": challenge_id,
-                "event_id": event.event_id,
-                "session_id": session_id,
-                "agent_id": agent_id,
-                "tool_name": tool_name,
-                "tool_server": tool_server,
-                "risk_score": event.risk_score,
-                "risk_factors": list(event.risk_factors),
-                "timestamp": now,
-                "expires_at": now + 300,
-                "status": "pending",
-                "parameters": redacted_params,
-            }
+            challenge_obj = self.challenge_manager.create_challenge(
+                event,
+                timeout_seconds=getattr(settings, "challenge_timeout_seconds", 60.0),
+                auto_dispatch=True,
+            )
+            self.pending_challenges[challenge_obj.challenge_id] = challenge_obj.to_dict()
+
+            # Strict fail-closed timeout window
+            resolved_decision, resolved_chg = await self.challenge_manager.wait_for_resolution(
+                challenge_obj.challenge_id,
+                timeout_seconds=getattr(settings, "challenge_timeout_seconds", 60.0),
+            )
+            self.pending_challenges[challenge_obj.challenge_id] = resolved_chg.to_dict()
+            decision = resolved_decision
+            event.decision = decision
+            if decision == EventDecision.BLOCK:
+                event.decision_reason = (
+                    resolved_chg.resolution_reason
+                    or "Challenge failed closed or was rejected by operator"
+                )
 
         # 6. Audit Logging & State Update
         await self.storage.record_event(session_id, agent_id, event.model_dump(mode="json"))
@@ -559,6 +622,19 @@ class CerberusProxyEngine:
                 params={"name": tool_name, "arguments": parameters},
                 request_id=request_id,
             )
+            if (
+                self.response_inspector
+                and isinstance(upstream_res, dict)
+                and "result" in upstream_res
+            ):
+                insp_res = await self.response_inspector.inspect_tool_result_async(
+                    session_id=session_id,
+                    tool_name=tool_name,
+                    result=upstream_res["result"],
+                    score=event.risk_score,
+                )
+                if insp_res.detected:
+                    upstream_res["result"] = insp_res.sanitized_result
             return event, upstream_res
 
         return event, {
@@ -567,6 +643,21 @@ class CerberusProxyEngine:
             "tool_name": tool_name,
             "result": f"Executed tool '{tool_name}' successfully",
         }
+
+    async def inspect_response(
+        self,
+        session_id: str,
+        tool_name: str,
+        result: Any,
+        score: float | None = None,
+    ) -> ResponseInspectionResult:
+        """Inspect tool output / response for indirect prompt injections and delimiter jailbreaks."""
+        return await self.response_inspector.inspect_tool_result_async(
+            session_id=session_id,
+            tool_name=tool_name,
+            result=result,
+            score=score,
+        )
 
     async def close(self):
         if self._refit_task:
@@ -931,10 +1022,9 @@ async def api_scanners_summary():
 @app.get("/api/challenges")
 async def api_list_challenges():
     """List pending and historical operator challenges."""
-    now = time.time()
-    for chg in engine.pending_challenges.values():
-        if chg.get("status") == "pending" and chg.get("expires_at", 0) < now:
-            chg["status"] = "expired"
+    engine.challenge_manager.sweep_expired()
+    for cid, chg_dict in engine.challenge_manager.challenges_dict.items():
+        engine.pending_challenges[cid] = chg_dict
     return list(engine.pending_challenges.values())
 
 
@@ -942,22 +1032,48 @@ async def api_list_challenges():
 async def api_resolve_challenge(
     challenge_id: str,
     payload: dict[str, Any] = Body(...),  # noqa: B008
+    authorization: str | None = Header(default=None, alias="Authorization"),
+    x_admin_token: str | None = Header(default=None, alias="X-Admin-Token"),
 ):
-    """Approve or reject a pending human challenge."""
-    chg = engine.pending_challenges.get(challenge_id)
-    if not chg:
-        raise HTTPException(status_code=404, detail="Challenge not found")
-
+    """Approve or reject a pending human challenge with step-up authentication."""
     action = payload.get("action", "reject")
     operator_id = payload.get("operator_id", "secops-operator")
     reason = payload.get("reason", "Operator resolution via dashboard")
+    step_up_token = payload.get("step_up_token") or payload.get("token")
 
-    chg["status"] = "approved" if action == "approve" else "rejected"
-    chg["resolved_by"] = operator_id
-    chg["resolution_reason"] = reason
-    chg["resolved_at"] = time.time()
+    # Extract bearer token from headers or payload
+    bearer_token = None
+    if authorization and authorization.lower().startswith("bearer "):
+        bearer_token = authorization.split(" ", 1)[1].strip()
+    elif authorization:
+        bearer_token = authorization.strip()
+    elif x_admin_token:
+        bearer_token = x_admin_token.strip()
+    elif payload.get("bearer_token"):
+        bearer_token = str(payload.get("bearer_token")).strip()
 
-    return {"status": "ok", "challenge": chg}
+    try:
+        resolved = engine.challenge_manager.resolve_challenge(
+            challenge_id=challenge_id,
+            action=action,
+            operator_id=operator_id,
+            reason=reason,
+            step_up_token=step_up_token,
+            bearer_token=bearer_token,
+        )
+        chg_dict = resolved.to_dict()
+        engine.pending_challenges[challenge_id] = chg_dict
+        return {"status": "ok", "challenge": chg_dict}
+    except ChallengeNotFoundError:
+        raise HTTPException(status_code=404, detail="Challenge not found")
+    except ChallengeExpiredError as e:
+        raise HTTPException(status_code=410, detail=str(e))
+    except InvalidChallengeStateError as e:
+        raise HTTPException(status_code=409, detail=str(e))
+    except StepUpAuthError as e:
+        raise HTTPException(status_code=401, detail=str(e))
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
 
 
 @app.post("/api/sessions/{session_id}/quarantine")
@@ -1244,6 +1360,8 @@ async def mcp_proxy_gateway(
             )
             # BUG-C1 fix: Pin schemas from upstream tools/list response
             tools = upstream_res.get("result", {}).get("tools", [])
+            if engine.response_inspector and tools:
+                engine.response_inspector.inspect_tools_list(tools)
             for tool in tools:
                 t_name = tool.get("name", "")
                 t_desc = tool.get("description", "")

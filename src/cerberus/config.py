@@ -60,6 +60,13 @@ class CerberusSettings(BaseSettings):
     # Scope enforcement: "learn" (monitor + log, fail-open) or "strict" (fail-closed from call #1)
     scope_enforcement_mode: Literal["learn", "strict"] = "learn"
 
+    # Human-in-the-Loop Webhooks & Step-Up Auth
+    challenge_timeout_seconds: float = 60.0
+    challenge_webhook_url: str = ""
+    challenge_webhook_secret: str = ""
+    challenge_webhook_format: Literal["generic", "slack"] = "generic"
+    step_up_token_ttl_seconds: int = 300
+
     model_config = SettingsConfigDict(env_prefix="CERBERUS_", env_file=".env", extra="ignore")
 
 
