@@ -236,7 +236,7 @@ class DLPScanner:
                 unquoted = urllib.parse.unquote(text)
                 if unquoted != text:
                     findings.extend(self._scan_direct_text(unquoted, f"{path}[url_unquoted]"))
-            except (ValueError, UnicodeDecodeError):
+            except ValueError:
                 pass
 
         # 3. Check for Base64 encoded payload segments
@@ -446,7 +446,7 @@ class DLPScanner:
                         decoded_text, f"{path}[b64_decoded:{candidate[:6]}...]"
                     )
                     findings.extend(sub_findings)
-            except (ValueError, UnicodeDecodeError):
+            except ValueError:
                 continue
         return findings
 
