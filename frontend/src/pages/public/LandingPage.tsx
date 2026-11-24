@@ -100,42 +100,40 @@ export const LandingPage: React.FC = () => {
         <MountainBackdrop opacity={0.9} />
 
         <div className="text-center relative z-10 max-w-4xl mx-auto">
-          {/* Status Pill matching Reference Design */}
-          <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-white/95 border border-[#DDD6FE] shadow-sm mb-8 backdrop-blur-md">
-            <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse" />
-            <span className="text-xs font-mono font-semibold text-[#6654E8]">
-              Guardian Active
+          {/* Status Pill (Unslop: Sentence case, no animated pulse, calm typography) */}
+          <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-white/95 border border-[#DDD6FE] shadow-xs mb-8 backdrop-blur-md">
+            <span className="w-2 h-2 rounded-full bg-emerald-500" />
+            <span className="text-xs font-mono font-medium text-[#6654E8]">
+              Guardian active
             </span>
             <span className="text-slate-300">•</span>
             <span className="text-xs font-mono text-[#5B5882]">
-              HTTP & Stdio MCP Interception
+              HTTP & Stdio MCP interception
             </span>
           </div>
 
           {/* Three-Headed Cerberus Centerpiece */}
           <div className="mb-6 flex justify-center">
-            <CerberusLogo size={104} glow className="filter drop-shadow-md" />
+            <CerberusLogo size={100} className="filter drop-shadow-xs" />
           </div>
 
-          {/* Hero Headline */}
-          <h1 className="text-5xl sm:text-6xl md:text-7xl font-display font-black tracking-tight text-[#171638] leading-[1.08] mb-6">
+          {/* Hero Headline (Unslop: Grounded weight, single deliberate accent, zero gradient text) */}
+          <h1 className="text-4xl sm:text-5xl md:text-6xl font-display font-semibold tracking-tight text-[#171638] leading-[1.12] mb-6">
             Watch. Analyze.{' '}
-            <span className="text-transparent bg-clip-text bg-gradient-to-r from-[#6654E8] via-[#7C3AED] to-[#5543D6]">
-              Protect.
-            </span>
+            <span className="text-[#6654E8]">Protect.</span>
           </h1>
 
           {/* Subhead */}
-          <p className="text-base sm:text-lg md:text-xl text-[#5B5882] font-normal max-w-2xl mx-auto leading-relaxed mb-10">
-            A Runtime Behavioral Firewall for Secure MCP-Based AI Agents. Intercepts multi-step tool-call attack chains, tracks data taint provenance, trips canary honeytokens, and enforces sub-millisecond fail-closed OPA policy gates.
+          <p className="text-base sm:text-lg text-[#5B5882] font-normal max-w-2xl mx-auto leading-relaxed mb-10">
+            A runtime behavioral firewall for MCP-based AI agents. Intercepts multi-step tool-call attack chains, tracks data taint provenance, trips canary honeytokens, and enforces fail-closed policy gates in real time.
           </p>
 
-          {/* Action Buttons Row */}
-          <div className="flex flex-wrap items-center justify-center gap-4 mb-16">
+          {/* Action Buttons Row (Unslop: Disciplined nested radii, no bouncy springs) */}
+          <div className="flex flex-wrap items-center justify-center gap-3.5 mb-16">
             <Button
               variant="brand"
               size="lg"
-              className="rounded-full shadow-lavender-md hover:shadow-lavender-lg px-8 py-3.5 text-sm"
+              className="rounded-xl px-7 py-3 text-sm shadow-xs hover:bg-[#5543D6] transition-colors"
               rightIcon={<ArrowRight className="w-4 h-4" />}
               onClick={() => navigate('/dashboard')}
             >
@@ -145,7 +143,7 @@ export const LandingPage: React.FC = () => {
             <Button
               variant="outline"
               size="lg"
-              className="rounded-full px-7 py-3.5 text-sm shadow-xs"
+              className="rounded-xl px-6 py-3 text-sm border-[#DDD6FE] text-[#171638] hover:bg-white hover:border-[#C4B5FD] transition-colors"
               leftIcon={<Layers className="w-4 h-4 text-[#6654E8]" />}
               onClick={() => navigate('/architecture')}
             >
@@ -155,7 +153,7 @@ export const LandingPage: React.FC = () => {
             <Button
               variant="secondary"
               size="lg"
-              className="rounded-full px-6 py-3.5 text-sm text-[#6654E8]"
+              className="rounded-xl px-6 py-3 text-sm text-[#6654E8] bg-white border border-[#EDE9FE] hover:bg-[#F5F3FF] transition-colors"
               leftIcon={<Play className="w-3.5 h-3.5 fill-current" />}
               onClick={() => navigate('/threat-lab')}
             >
@@ -163,50 +161,50 @@ export const LandingPage: React.FC = () => {
             </Button>
           </div>
 
-          {/* 3 Metrics Summary Cards matching Reference Image */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-5 max-w-3xl mx-auto text-left">
-            <div className="p-5 rounded-2xl bg-white/95 border border-[#EDE9FE] shadow-lavender backdrop-blur-md transition-transform hover:-translate-y-1">
+          {/* 3 Metrics Summary Cards (Unslop: Sentence case, tabular figures, no bouncy hover scale) */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 max-w-3xl mx-auto text-left">
+            <div className="p-5 rounded-xl bg-white/95 border border-[#EDE9FE] shadow-xs backdrop-blur-md">
               <div className="flex items-center justify-between mb-2">
-                <span className="text-xs font-mono font-semibold text-[#5B5882] uppercase tracking-wider">
-                  Attack Catch
+                <span className="text-xs font-mono font-medium text-[#5B5882]">
+                  Attack catch
                 </span>
                 <span className="w-2 h-2 rounded-full bg-emerald-500" />
               </div>
-              <div className="text-3xl font-display font-black text-[#171638] tracking-tight">
+              <div className="text-2xl sm:text-3xl font-display font-semibold text-[#171638] tracking-tight tabular-nums">
                 100.0%
               </div>
               <p className="text-xs text-[#8E8AA7] mt-1 font-mono">
-                0% False Negatives on Toxic Flow
+                0% false negatives on toxic flow
               </p>
             </div>
 
-            <div className="p-5 rounded-2xl bg-white/95 border border-[#EDE9FE] shadow-lavender backdrop-blur-md transition-transform hover:-translate-y-1">
+            <div className="p-5 rounded-xl bg-white/95 border border-[#EDE9FE] shadow-xs backdrop-blur-md">
               <div className="flex items-center justify-between mb-2">
-                <span className="text-xs font-mono font-semibold text-[#5B5882] uppercase tracking-wider">
-                  P95 Latency
+                <span className="text-xs font-mono font-medium text-[#5B5882]">
+                  P95 latency
                 </span>
                 <span className="w-2 h-2 rounded-full bg-sky-500" />
               </div>
-              <div className="text-3xl font-display font-black text-[#171638] tracking-tight">
+              <div className="text-2xl sm:text-3xl font-display font-semibold text-[#171638] tracking-tight tabular-nums">
                 14.02 ms
               </div>
               <p className="text-xs text-[#8E8AA7] mt-1 font-mono">
-                Ultra-low proxy evaluation overhead
+                Average proxy evaluation overhead
               </p>
             </div>
 
-            <div className="p-5 rounded-2xl bg-white/95 border border-[#EDE9FE] shadow-lavender backdrop-blur-md transition-transform hover:-translate-y-1">
+            <div className="p-5 rounded-xl bg-white/95 border border-[#EDE9FE] shadow-xs backdrop-blur-md">
               <div className="flex items-center justify-between mb-2">
-                <span className="text-xs font-mono font-semibold text-[#5B5882] uppercase tracking-wider">
-                  Policy Gate
+                <span className="text-xs font-mono font-medium text-[#5B5882]">
+                  Policy gate
                 </span>
                 <span className="w-2 h-2 rounded-full bg-[#7C3AED]" />
               </div>
-              <div className="text-3xl font-display font-black text-[#6654E8] tracking-tight">
-                Fail-Closed
+              <div className="text-2xl sm:text-3xl font-display font-semibold text-[#6654E8] tracking-tight">
+                Fail-closed
               </div>
               <p className="text-xs text-[#8E8AA7] mt-1 font-mono">
-                OPA Rego Zero-Trust Enforcement
+                OPA Rego zero-trust enforcement
               </p>
             </div>
           </div>
@@ -219,10 +217,10 @@ export const LandingPage: React.FC = () => {
       <section className="px-4 sm:px-6 lg:px-8 max-w-7xl mx-auto">
         <div className="text-center max-w-3xl mx-auto mb-10">
           <Badge variant="primary" size="sm" className="mb-3">
-            <Sparkles className="w-3.5 h-3.5 mr-1 text-[#7C3AED]" />
-            WebGL Three.js 3D Interactive Topology
+            <Shield className="w-3.5 h-3.5 mr-1 text-[#7C3AED]" />
+            WebGL Three.js 3D interactive topology
           </Badge>
-          <h2 className="text-3xl sm:text-4xl font-display font-black text-[#171638] tracking-tight">
+          <h2 className="text-3xl sm:text-4xl font-display font-semibold text-[#171638] tracking-tight">
             Live 3D Neural Behavioral Firewall
           </h2>
           <p className="text-sm sm:text-base text-[#5B5882] mt-3">
@@ -231,7 +229,7 @@ export const LandingPage: React.FC = () => {
         </div>
 
         {/* Embedded Interactive 3D Canvas */}
-        <div className="shadow-lavender-lg rounded-2xl overflow-hidden border border-[#EDE9FE]">
+        <div className="shadow-xs rounded-xl overflow-hidden border border-[#EDE9FE]">
           <ThreeFirewallCanvas
             theme="lavender"
             height={440}
@@ -246,11 +244,11 @@ export const LandingPage: React.FC = () => {
           ========================================================================= */}
       <section className="py-20 bg-white/80 border-y border-[#EDE9FE] px-4 sm:px-6 lg:px-8">
         <div className="max-w-7xl mx-auto">
-          <div className="text-center max-w-2xl mx-auto mb-16">
-            <span className="text-xs font-mono font-bold uppercase tracking-wider text-[#6654E8] bg-[#EDE9FE] px-3 py-1 rounded-full border border-[#DDD6FE]">
-              Architecture Foundations
+          <div className="text-center max-w-2xl mx-auto mb-14">
+            <span className="text-xs font-mono font-medium text-[#6654E8] bg-[#EDE9FE] px-3 py-1 rounded-md border border-[#DDD6FE]">
+              Architecture foundations
             </span>
-            <h2 className="text-3xl sm:text-4xl font-display font-black text-[#171638] mt-3 tracking-tight">
+            <h2 className="text-3xl sm:text-4xl font-display font-semibold text-[#171638] mt-3 tracking-tight">
               Five Architectural Pillars of Zero-Trust
             </h2>
             <p className="text-sm sm:text-base text-[#5B5882] mt-2">
@@ -258,72 +256,72 @@ export const LandingPage: React.FC = () => {
             </p>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-5">
             {/* Pillar 1 */}
-            <div className="p-6 rounded-2xl bg-[#F5F3FF]/80 border border-[#EDE9FE] hover:border-[#DDD6FE] transition-all hover:shadow-lavender">
-              <div className="w-10 h-10 rounded-xl bg-white flex items-center justify-center text-[#6654E8] shadow-xs mb-4 border border-[#EDE9FE]">
-                <Eye className="w-5 h-5" />
+            <div className="p-5 rounded-xl bg-[#F5F3FF]/80 border border-[#EDE9FE] hover:border-[#DDD6FE] transition-colors">
+              <div className="w-9 h-9 rounded-lg bg-white flex items-center justify-center text-[#6654E8] shadow-xs mb-3.5 border border-[#EDE9FE]">
+                <Eye className="w-4 h-4" />
               </div>
-              <span className="text-[10px] font-mono font-bold text-[#8E8AA7] uppercase tracking-wider">
+              <span className="text-[11px] font-mono font-medium text-[#8E8AA7]">
                 Pillar 01
               </span>
-              <h3 className="text-lg font-bold text-[#171638] mt-1 mb-2">Observe</h3>
+              <h3 className="text-base font-semibold text-[#171638] mt-1 mb-1.5">Observe</h3>
               <p className="text-xs text-[#5B5882] leading-relaxed">
                 Full-spectrum JSON-RPC proxy intercepting stdio & HTTP tool calls, calculating parameter Shannon entropy, and sanitizing payloads.
               </p>
             </div>
 
             {/* Pillar 2 */}
-            <div className="p-6 rounded-2xl bg-[#F5F3FF]/80 border border-[#EDE9FE] hover:border-[#DDD6FE] transition-all hover:shadow-lavender">
-              <div className="w-10 h-10 rounded-xl bg-white flex items-center justify-center text-[#7C3AED] shadow-xs mb-4 border border-[#EDE9FE]">
-                <Cpu className="w-5 h-5" />
+            <div className="p-5 rounded-xl bg-[#F5F3FF]/80 border border-[#EDE9FE] hover:border-[#DDD6FE] transition-colors">
+              <div className="w-9 h-9 rounded-lg bg-white flex items-center justify-center text-[#7C3AED] shadow-xs mb-3.5 border border-[#EDE9FE]">
+                <Cpu className="w-4 h-4" />
               </div>
-              <span className="text-[10px] font-mono font-bold text-[#8E8AA7] uppercase tracking-wider">
+              <span className="text-[11px] font-mono font-medium text-[#8E8AA7]">
                 Pillar 02
               </span>
-              <h3 className="text-lg font-bold text-[#171638] mt-1 mb-2">Analyze</h3>
+              <h3 className="text-base font-semibold text-[#171638] mt-1 mb-1.5">Analyze</h3>
               <p className="text-xs text-[#5B5882] leading-relaxed">
                 4-layer ML ensemble (Rule heuristics, Markov transition matrix, Isolation Forest, Transformer) paired with SHA-256 Taint DAG.
               </p>
             </div>
 
             {/* Pillar 3 */}
-            <div className="p-6 rounded-2xl bg-[#F5F3FF]/80 border border-[#EDE9FE] hover:border-[#DDD6FE] transition-all hover:shadow-lavender">
-              <div className="w-10 h-10 rounded-xl bg-white flex items-center justify-center text-[#B91C1C] shadow-xs mb-4 border border-[#EDE9FE]">
-                <Lock className="w-5 h-5" />
+            <div className="p-5 rounded-xl bg-[#F5F3FF]/80 border border-[#EDE9FE] hover:border-[#DDD6FE] transition-colors">
+              <div className="w-9 h-9 rounded-lg bg-white flex items-center justify-center text-[#B91C1C] shadow-xs mb-3.5 border border-[#EDE9FE]">
+                <Lock className="w-4 h-4" />
               </div>
-              <span className="text-[10px] font-mono font-bold text-[#8E8AA7] uppercase tracking-wider">
+              <span className="text-[11px] font-mono font-medium text-[#8E8AA7]">
                 Pillar 03
               </span>
-              <h3 className="text-lg font-bold text-[#171638] mt-1 mb-2">Enforce</h3>
+              <h3 className="text-base font-semibold text-[#171638] mt-1 mb-1.5">Enforce</h3>
               <p className="text-xs text-[#5B5882] leading-relaxed">
                 Sub-millisecond Open Policy Agent (OPA) Rego v1 evaluation with automated circuit-breakers ensuring strict fail-closed safety.
               </p>
             </div>
 
             {/* Pillar 4 */}
-            <div className="p-6 rounded-2xl bg-[#F5F3FF]/80 border border-[#EDE9FE] hover:border-[#DDD6FE] transition-all hover:shadow-lavender">
-              <div className="w-10 h-10 rounded-xl bg-white flex items-center justify-center text-[#0284C7] shadow-xs mb-4 border border-[#EDE9FE]">
-                <FileCode className="w-5 h-5" />
+            <div className="p-5 rounded-xl bg-[#F5F3FF]/80 border border-[#EDE9FE] hover:border-[#DDD6FE] transition-colors">
+              <div className="w-9 h-9 rounded-lg bg-white flex items-center justify-center text-[#0284C7] shadow-xs mb-3.5 border border-[#EDE9FE]">
+                <FileCode className="w-4 h-4" />
               </div>
-              <span className="text-[10px] font-mono font-bold text-[#8E8AA7] uppercase tracking-wider">
+              <span className="text-[11px] font-mono font-medium text-[#8E8AA7]">
                 Pillar 04
               </span>
-              <h3 className="text-lg font-bold text-[#171638] mt-1 mb-2">Investigate</h3>
+              <h3 className="text-base font-semibold text-[#171638] mt-1 mb-1.5">Investigate</h3>
               <p className="text-xs text-[#5B5882] leading-relaxed">
                 Tamper-evident cryptographic ledger with Merkle SHA-256 hash chaining, Fernet log encryption, and automated narrative export.
               </p>
             </div>
 
             {/* Pillar 5 */}
-            <div className="p-6 rounded-2xl bg-[#F5F3FF]/80 border border-[#EDE9FE] hover:border-[#DDD6FE] transition-all hover:shadow-lavender">
-              <div className="w-10 h-10 rounded-xl bg-white flex items-center justify-center text-[#D97706] shadow-xs mb-4 border border-[#EDE9FE]">
-                <Activity className="w-5 h-5" />
+            <div className="p-5 rounded-xl bg-[#F5F3FF]/80 border border-[#EDE9FE] hover:border-[#DDD6FE] transition-colors">
+              <div className="w-9 h-9 rounded-lg bg-white flex items-center justify-center text-[#D97706] shadow-xs mb-3.5 border border-[#EDE9FE]">
+                <Activity className="w-4 h-4" />
               </div>
-              <span className="text-[10px] font-mono font-bold text-[#8E8AA7] uppercase tracking-wider">
+              <span className="text-[11px] font-mono font-medium text-[#8E8AA7]">
                 Pillar 05
               </span>
-              <h3 className="text-lg font-bold text-[#171638] mt-1 mb-2">Adapt</h3>
+              <h3 className="text-base font-semibold text-[#171638] mt-1 mb-1.5">Adapt</h3>
               <p className="text-xs text-[#5B5882] leading-relaxed">
                 Continuous online streaming scaler refitting, Total Variation Distance (TVD) baseline drift monitoring, and closed-loop Rego synthesizer.
               </p>
@@ -336,11 +334,11 @@ export const LandingPage: React.FC = () => {
           6 ENTERPRISE CAPABILITIES GRID
           ========================================================================= */}
       <section className="px-4 sm:px-6 lg:px-8 max-w-7xl mx-auto">
-        <div className="text-center max-w-3xl mx-auto mb-16">
+        <div className="text-center max-w-3xl mx-auto mb-14">
           <Badge variant="primary" size="sm" className="mb-3">
-            Industry-Grade Security
+            Industry-grade security
           </Badge>
-          <h2 className="text-3xl sm:text-4xl font-display font-black text-[#171638] tracking-tight">
+          <h2 className="text-3xl sm:text-4xl font-display font-semibold text-[#171638] tracking-tight">
             Comprehensive Defense Against Agentic Attacks
           </h2>
           <p className="text-sm sm:text-base text-[#5B5882] mt-3">
@@ -348,99 +346,99 @@ export const LandingPage: React.FC = () => {
           </p>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {/* Card 1 */}
-          <div className="p-7 rounded-2xl bg-white border border-[#EDE9FE] shadow-lavender hover:shadow-lavender-md transition-all">
-            <div className="w-12 h-12 rounded-xl bg-[#EDE9FE] flex items-center justify-center text-[#6654E8] mb-5">
-              <Network className="w-6 h-6" />
+          <div className="p-6 rounded-xl bg-white border border-[#EDE9FE] shadow-xs">
+            <div className="w-10 h-10 rounded-lg bg-[#EDE9FE] flex items-center justify-center text-[#6654E8] mb-4">
+              <Network className="w-5 h-5" />
             </div>
-            <h3 className="text-lg font-bold text-[#171638] mb-2">
+            <h3 className="text-base font-semibold text-[#171638] mb-1.5">
               Multi-Step Kill-Chain Interception
             </h3>
-            <p className="text-xs text-[#5B5882] leading-relaxed mb-4">
+            <p className="text-xs text-[#5B5882] leading-relaxed mb-3.5">
               Defeats toxic tool combinations (e.g., File Read → Prompt Injection → Exfiltration Sink) by modeling Markov state transitions and cross-tool parameter entropy.
             </p>
-            <span className="text-[11px] font-mono font-semibold text-[#6654E8]">
+            <span className="text-[11px] font-mono font-medium text-[#6654E8]">
               OWASP ASI01 • ASI06 • ASI08
             </span>
           </div>
 
           {/* Card 2 */}
-          <div className="p-7 rounded-2xl bg-white border border-[#EDE9FE] shadow-lavender hover:shadow-lavender-md transition-all">
-            <div className="w-12 h-12 rounded-xl bg-[#EDE9FE] flex items-center justify-center text-[#7C3AED] mb-5">
-              <Shield className="w-6 h-6" />
+          <div className="p-6 rounded-xl bg-white border border-[#EDE9FE] shadow-xs">
+            <div className="w-10 h-10 rounded-lg bg-[#EDE9FE] flex items-center justify-center text-[#7C3AED] mb-4">
+              <Shield className="w-5 h-5" />
             </div>
-            <h3 className="text-lg font-bold text-[#171638] mb-2">
+            <h3 className="text-base font-semibold text-[#171638] mb-1.5">
               Taint & Provenance Tracking DAG
             </h3>
-            <p className="text-xs text-[#5B5882] leading-relaxed mb-4">
+            <p className="text-xs text-[#5B5882] leading-relaxed mb-3.5">
               Fingerprints untrusted web content, issue bodies, and email attachments with cryptographic taint tags. Blocks statistical mimicry attacks deterministically.
             </p>
-            <span className="text-[11px] font-mono font-semibold text-[#7C3AED]">
+            <span className="text-[11px] font-mono font-medium text-[#7C3AED]">
               SHA-256 Provenance • 1.0 BLOCK Override
             </span>
           </div>
 
           {/* Card 3 */}
-          <div className="p-7 rounded-2xl bg-white border border-[#EDE9FE] shadow-lavender hover:shadow-lavender-md transition-all">
-            <div className="w-12 h-12 rounded-xl bg-[#EDE9FE] flex items-center justify-center text-[#DB2777] mb-5">
-              <Zap className="w-6 h-6" />
+          <div className="p-6 rounded-xl bg-white border border-[#EDE9FE] shadow-xs">
+            <div className="w-10 h-10 rounded-lg bg-[#EDE9FE] flex items-center justify-center text-[#DB2777] mb-4">
+              <Zap className="w-5 h-5" />
             </div>
-            <h3 className="text-lg font-bold text-[#171638] mb-2">
+            <h3 className="text-base font-semibold text-[#171638] mb-1.5">
               ASI10 Canary Honeytokens
             </h3>
-            <p className="text-xs text-[#5B5882] leading-relaxed mb-4">
+            <p className="text-xs text-[#5B5882] leading-relaxed mb-3.5">
               Plants decoy AWS credentials, .env.canary tokens, and database secrets. Any agent attempt to read or egress a honeytoken triggers instant auto-quarantine.
             </p>
-            <span className="text-[11px] font-mono font-semibold text-[#DB2777]">
+            <span className="text-[11px] font-mono font-medium text-[#DB2777]">
               O(1) Hash Lookup • Auto-Quarantine
             </span>
           </div>
 
           {/* Card 4 */}
-          <div className="p-7 rounded-2xl bg-white border border-[#EDE9FE] shadow-lavender hover:shadow-lavender-md transition-all">
-            <div className="w-12 h-12 rounded-xl bg-[#EDE9FE] flex items-center justify-center text-[#D97706] mb-5">
-              <AlertTriangle className="w-6 h-6" />
+          <div className="p-6 rounded-xl bg-white border border-[#EDE9FE] shadow-xs">
+            <div className="w-10 h-10 rounded-lg bg-[#EDE9FE] flex items-center justify-center text-[#D97706] mb-4">
+              <AlertTriangle className="w-5 h-5" />
             </div>
-            <h3 className="text-lg font-bold text-[#171638] mb-2">
+            <h3 className="text-base font-semibold text-[#171638] mb-1.5">
               Egress DLP & Sliding Quotas
             </h3>
-            <p className="text-xs text-[#5B5882] leading-relaxed mb-4">
+            <p className="text-xs text-[#5B5882] leading-relaxed mb-3.5">
               Neutralizes slow-drip data exfiltration with 500 KB / 60s sliding window byte quotas and destination caps. Real-time PII & API key regex scanner.
             </p>
-            <span className="text-[11px] font-mono font-semibold text-[#D97706]">
+            <span className="text-[11px] font-mono font-medium text-[#D97706]">
               Deterministic Sliding Window Guard
             </span>
           </div>
 
           {/* Card 5 */}
-          <div className="p-7 rounded-2xl bg-white border border-[#EDE9FE] shadow-lavender hover:shadow-lavender-md transition-all">
-            <div className="w-12 h-12 rounded-xl bg-[#EDE9FE] flex items-center justify-center text-[#0284C7] mb-5">
-              <Eye className="w-6 h-6" />
+          <div className="p-6 rounded-xl bg-white border border-[#EDE9FE] shadow-xs">
+            <div className="w-10 h-10 rounded-lg bg-[#EDE9FE] flex items-center justify-center text-[#0284C7] mb-4">
+              <Eye className="w-5 h-5" />
             </div>
-            <h3 className="text-lg font-bold text-[#171638] mb-2">
+            <h3 className="text-base font-semibold text-[#171638] mb-1.5">
               Response Shield & LLM Adjudicator
             </h3>
-            <p className="text-xs text-[#5B5882] leading-relaxed mb-4">
+            <p className="text-xs text-[#5B5882] leading-relaxed mb-3.5">
               Inspects tool results and server schemas for hidden prompt injections, system prompt overrides, and markdown beacon leaks before reflection into agent context.
             </p>
-            <span className="text-[11px] font-mono font-semibold text-[#0284C7]">
+            <span className="text-[11px] font-mono font-medium text-[#0284C7]">
               Async Context Reflection Defense
             </span>
           </div>
 
           {/* Card 6 */}
-          <div className="p-7 rounded-2xl bg-white border border-[#EDE9FE] shadow-lavender hover:shadow-lavender-md transition-all">
-            <div className="w-12 h-12 rounded-xl bg-[#EDE9FE] flex items-center justify-center text-[#CA8A04] mb-5">
-              <Lock className="w-6 h-6" />
+          <div className="p-6 rounded-xl bg-white border border-[#EDE9FE] shadow-xs">
+            <div className="w-10 h-10 rounded-lg bg-[#EDE9FE] flex items-center justify-center text-[#CA8A04] mb-4">
+              <Lock className="w-5 h-5" />
             </div>
-            <h3 className="text-lg font-bold text-[#171638] mb-2">
+            <h3 className="text-base font-semibold text-[#171638] mb-1.5">
               Cryptographic Step-Up Gate
             </h3>
-            <p className="text-xs text-[#5B5882] leading-relaxed mb-4">
+            <p className="text-xs text-[#5B5882] leading-relaxed mb-3.5">
               Pauses borderline or destructive tool calls for human-in-the-loop operator approval via HMAC-SHA256 bearer tokens and Slack Block-Kit webhooks with fail-closed TTLs.
             </p>
-            <span className="text-[11px] font-mono font-semibold text-[#CA8A04]">
+            <span className="text-[11px] font-mono font-medium text-[#CA8A04]">
               HMAC Approval • 60s Fail-Closed Timeout
             </span>
           </div>
@@ -471,11 +469,10 @@ export const LandingPage: React.FC = () => {
                 <div
                   key={sc.title}
                   onClick={() => handleRunSimulation(i)}
-                  className={`p-4 rounded-xl border cursor-pointer transition-all ${
-                    activeScenario === i
+                  className={`p-4 rounded-xl border cursor-pointer transition-all ${activeScenario === i
                       ? 'bg-white border-[#6654E8] shadow-lavender-md translate-x-1'
                       : 'bg-white/70 border-[#EDE9FE] hover:bg-white hover:border-[#DDD6FE]'
-                  }`}
+                    }`}
                 >
                   <div className="flex items-center justify-between mb-1">
                     <span className="text-xs font-mono font-semibold text-[#6654E8]">{sc.tag}</span>

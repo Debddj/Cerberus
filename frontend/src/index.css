@@ -85,29 +85,35 @@
   border: 1px solid #EDE9FE;
 }
 
-/* Glow Effects */
+/* Quiet Surface Highlights (Unslop standard: replaced colored glows with hairlines & neutral elevation) */
 .glow-purple {
-  box-shadow: 0 0 24px -2px rgba(102, 84, 232, 0.35);
+  box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.05);
+  border-color: rgba(102, 84, 232, 0.25);
 }
 
 .glow-cyan {
-  box-shadow: 0 0 22px -4px rgba(2, 132, 199, 0.32);
+  box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.05);
+  border-color: rgba(2, 132, 199, 0.25);
 }
 
 .glow-taint {
-  box-shadow: 0 0 22px -4px rgba(124, 58, 237, 0.35);
+  box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.05);
+  border-color: rgba(124, 58, 237, 0.25);
 }
 
 .glow-danger {
-  box-shadow: 0 0 22px -4px rgba(239, 68, 68, 0.35);
+  box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.05);
+  border-color: rgba(239, 68, 68, 0.3);
 }
 
 .glow-canary {
-  box-shadow: 0 0 22px -4px rgba(219, 39, 119, 0.35);
+  box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.05);
+  border-color: rgba(219, 39, 119, 0.3);
 }
 
 .glow-warning {
-  box-shadow: 0 0 22px -4px rgba(245, 158, 11, 0.35);
+  box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.05);
+  border-color: rgba(245, 158, 11, 0.3);
 }
 
 /* =========================================================================

@@ -17,19 +17,13 @@ export const CerberusLogo: React.FC<CerberusLogoProps> = ({
 
   return (
     <div className={`relative inline-flex items-center justify-center ${className}`}>
-      {glow && (
-        <div
-          className="absolute inset-0 rounded-full bg-[#6654E8]/25 blur-xl -z-10 animate-pulse-slow"
-          style={{ width: dimension, height: dimension }}
-        />
-      )}
       <svg
         width={dimension}
         height={dimension}
         viewBox="0 0 120 120"
         fill="none"
         xmlns="http://www.w3.org/2000/svg"
-        className="transition-transform duration-300 hover:scale-105"
+        className="transition-opacity duration-200"
       >
         <defs>
           {/* Lavender & Purple Gradients */}
